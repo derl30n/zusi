@@ -1,0 +1,17 @@
+{
+  "paths": [
+    "D:/Steam/steamapps/common/ZUSI 3 - Aerosoft Edition/_Zusidata/Timetables",
+    "C:/Users/Leon/Documents/Zusi3Steam/Timetables"
+  ],
+  "datatype": {
+    "timetable": "fpn",
+    "service": "xml"
+  },
+  "exclusionKeywords": [
+    "DEKO",
+    "Deko",
+    "deko",
+    "_Docu",
+    "expense"
+  ]
+}
