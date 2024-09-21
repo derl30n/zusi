@@ -29,7 +29,7 @@ After downloading the latest build and extracting the zip file, your folder shou
 ---
 
 ### II: Editing `config.json`
-Open the `config.json` with an editor of your choice. I recommend Notepad++.
+Open the `config.json` with an editor of your choice. I recommend [Notepad++](https://notepad-plus-plus.org/downloads/).
 
 ![Config JSON](https://i.imgur.com/UbfBd35.png)
 
