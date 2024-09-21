@@ -2,7 +2,7 @@ import json
 import os
 import sqlite3
 from dataclasses import dataclass, field
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as Et
 from datetime import datetime
 from tqdm import tqdm
 
@@ -41,16 +41,19 @@ def getCompletePackage(string: str, attributes: dict) -> dict:
 def getTimetablesFromZusiFiles(config: Config) -> list:
     timetables = []
 
-    for cfgPath in config.paths:
-        for country in os.listdir(cfgPath):  # looping countries
-            if country in config.exclusionKeywords:
-                continue
+    try:
+        for cfgPath in config.paths:
+            for country in os.listdir(cfgPath):  # looping countries
+                if country.lower() in config.exclusionKeywords:
+                    continue
 
-            for route in os.listdir(f'{cfgPath}/{country}'):  # looping routes
-                timetables.extend(
-                    [f.path[:-(len(config.datatype.timetable) + 1)] for f in os.scandir(f'{cfgPath}/{country}/{route}')
-                     if config.datatype.timetable == f.path[-len(config.datatype.timetable):]]
-                )
+                for route in os.listdir(f'{cfgPath}/{country}'):  # looping routes
+                    timetables.extend(
+                        [f.path[:-(len(config.datatype.timetable) + 1)] for f in os.scandir(f'{cfgPath}/{country}/{route}')
+                         if config.datatype.timetable == f.path[-len(config.datatype.timetable):]]
+                    )
+    except FileNotFoundError as e:
+        print(e)
 
     return timetables
 
@@ -83,24 +86,22 @@ def getDataFromTimetables(timetables: list, config: Config):
 
     for timetable in tqdm(timetables, desc="Durchsuche Fahrpläne nach Zugdiensten"):
         for service in [f.path for f in os.scandir(timetable) if config.datatype.service == f.path[-len(config.datatype.service):]]:
-            if any([x in service for x in config.exclusionKeywords]):
+            if any([x.lower() in service.lower() for x in config.exclusionKeywords]):
                 continue
 
-            root = ET.parse(service).getroot()
+            root = Et.parse(service).getroot()
             for type_tag in root.findall('Buchfahrplan'):
                 # try to get service details
                 try:
-                    root_trn = ET.parse(f'{service[:-13]}trn').getroot()
+                    root_trn = Et.parse(f'{service[:-13]}trn').getroot()
                 except FileNotFoundError:
                     continue
 
                 zug = root_trn.findall('Zug')[0]
-
                 duration = getDurationFromTimetableEntry(zug)
-
                 fahrplanGruppe = zug.get('FahrplanGruppe')
 
-                if any([x in fahrplanGruppe for x in config.exclusionKeywords]):
+                if any([x.lower() in fahrplanGruppe.lower() for x in config.exclusionKeywords]):
                     continue
 
                 result.append(
