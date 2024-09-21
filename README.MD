@@ -1,3 +1,79 @@
+
+# Step-by-step Setup and Usage Guide
+
+## Navigation:
+1. [Setup](#setup)
+    - [I: Folder Structure Overview](#i-folder-structure-overview)
+    - [II: Editing `config.json`](#ii-editing-configjson)
+    - [III: Running the Executable](#iii-running-the-executable)
+2. [Usage](#usage)
+    - [IV: Opening the Database File](#iv-opening-the-database-file)
+    - [V: Example](#v-example)
+3. [Developer Information and customization](#dev-info)
+
+---
+
+## Setup
+
+### I: Folder Structure Overview
+After downloading the latest build and extracting the zip file, your folder should look like this:
+![Folder Structure](https://i.imgur.com/agk5WrX.png)
+
+---
+
+### II: Editing `config.json`
+Open the `config.json` with an editor of your choice. I recommend Notepad++.
+
+![Config JSON](https://i.imgur.com/UbfBd35.png)
+
+The relevant section is `paths`, where you can configure:
+1. Shipped schedules (installation directory)
+2. User-created schedules (documents directory)
+
+_If you haven’t created any custom timetables, the documents folder might not exist._
+
+---
+
+### III: Running the Executable
+After setting up `config.json`, run the executable.
+
+![Running EXE](https://i.imgur.com/hNbEts5.png)
+
+If there's an error, like the directory for custom timetables not being found, it's likely because no custom timetables have been created yet.
+
+_Note: The console window closes automatically upon execution. To keep it open, run the exe from the terminal._
+
+Once finished, the database file should be visible:
+![Database File](https://i.imgur.com/QbnYmn1.png)
+
+---
+
+## Usage
+
+### IV: Opening the Database File
+To explore the database file, use a database viewer like [sqlite](https://sqlitebrowser.org/dl/).
+
+![SQLite Viewer](https://i.imgur.com/yXwCSo8.png)
+
+Click on the "Browse Data" tab to filter and sort through all drivable jobs in Zusi.
+
+![Browse Data](https://i.imgur.com/RN1d3Kv.png)
+
+---
+
+### V: Example
+
+Route: Hamburg - Kassel  
+Loco: BR 412 (ICE 4)
+
+![Example Route](https://i.imgur.com/ph5xlK6.png)
+![Example Loco](https://i.imgur.com/RXm0UjN.png)
+![Service Details](https://i.imgur.com/kXYdglS.png)
+
+---
+
+## Dev Info
+
 ### zugdiensteAktualisieren.bat
 
 ```
@@ -5,14 +81,16 @@
 pause
 
 ```
-
+---
 ### zugienstdatenbank.bat
 
 ```
 start "" "$path\SQLite.exe" "zugdienste.db"
 ```
 
-To open db file, use an db viewer like [sqlite](https://sqlitebrowser.org/dl/)
+To open db file, use a db viewer like [sqlite](https://sqlitebrowser.org/dl/)
+
+---
 
 ### Build executable:
 
@@ -22,7 +100,7 @@ To open db file, use an db viewer like [sqlite](https://sqlitebrowser.org/dl/)
 
 `pip3 install tqdm`
 
-`python .\main.py` to check if it runs as expected in new virtual environtment
+`python .\main.py` to check if it runs as expected in new virtual environment
 
 `pip3 install pyinstaller` install the pyinstaller if not done yet
 
@@ -30,4 +108,6 @@ To open db file, use an db viewer like [sqlite](https://sqlitebrowser.org/dl/)
 
 `pyinstaller --onefile --icon=ZusiFtdEditor.64.exe main.py` create the exe
 
-`.\dist\main.exe` run the exe !!dont forget to provide the config.json!!
+`.\dist\main.exe` run the exe !!don't forget to provide the config.json!!
+
+---
