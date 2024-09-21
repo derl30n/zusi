@@ -16,7 +16,7 @@
 
 ## Download
 
-Download the build from the [latest release](/releases/latest) or click [here](/releases/latest/download/release.zip).
+Download the build from the [latest release](https://github.com/derl30n/zusi/releases/latest) or click [here](https://github.com/derl30n/zusi/releases/latest/download/release.zip).
 
 ---
 
