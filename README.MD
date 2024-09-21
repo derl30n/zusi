@@ -18,6 +18,8 @@ start "" "$path\SQLite.exe" "zugdienste.db"
 
 `.\zusi\Scripts\activate`
 
+`pip3 install tqdm`
+
 `python .\main.py` to check if it runs as expected in new virtual environtment
 
 `pip3 install pyinstaller` install the pyinstaller if not done yet
