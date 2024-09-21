@@ -1,5 +1,10 @@
 __pycache__/
 tools/
 .idea/
+build/
+dist/
+zusi/
 *.db
 *.bat
+*.spec
+*.exe
