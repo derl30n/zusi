@@ -12,7 +12,9 @@ pause
 start "" "$path\SQLite.exe" "zugdienste.db"
 ```
 
-### Executable:
+To open db file, use an db viewer like [sqlite](https://sqlitebrowser.org/dl/)
+
+### Build executable:
 
 `python -m venv zusi`
 
