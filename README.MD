@@ -2,14 +2,21 @@
 # Step-by-step Setup and Usage Guide
 
 ## Navigation:
-1. [Setup](#setup)
-    - [I: Folder Structure Overview](#i-folder-structure-overview)
-    - [II: Editing `config.json`](#ii-editing-configjson)
-    - [III: Running the Executable](#iii-running-the-executable)
-2. [Usage](#usage)
-    - [IV: Opening the Database File](#iv-opening-the-database-file)
-    - [V: Example](#v-example)
-3. [Developer Information and customization](#dev-info)
+1. [Download](#download)
+2. [Setup](#setup)
+   - [I: Folder Structure Overview](#i-folder-structure-overview)
+   - [II: Editing `config.json`](#ii-editing-configjson)
+   - [III: Running the Executable](#iii-running-the-executable)
+3. [Usage](#usage)
+   - [IV: Opening the Database File](#iv-opening-the-database-file)
+   - [V: Example](#v-example)
+4. [Developer Information and customization](#dev-info)
+
+---
+
+## Download
+
+Download the build from the [latest release](/releases/latest) or click [here](/releases/latest/download/release.zip).
 
 ---
 
