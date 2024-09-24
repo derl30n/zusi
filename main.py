@@ -1,8 +1,8 @@
 import json
 import os
 import sqlite3
-from dataclasses import dataclass, field
 import xml.etree.ElementTree as Et
+from dataclasses import dataclass, field
 from datetime import datetime
 from tqdm import tqdm
 
@@ -58,12 +58,12 @@ def getTimetablesFromZusiFiles(config: Config) -> list:
     return timetables
 
 
-def getDurationFromTimetableEntry(zug) -> str:
-    start = None
-    end = None
+def getTimesFromTimetableEntry(zug) -> (str, str):
+    start: str = ""
+    end: str = ""
 
     for trn_type_tag in zug.findall('FahrplanEintrag'):
-        abf = trn_type_tag.get('Abf')
+        abf: str = trn_type_tag.get('Abf')
 
         if not abf:
             continue
@@ -74,11 +74,16 @@ def getDurationFromTimetableEntry(zug) -> str:
         end = abf
 
     try:
-        duration = str(datetime.strptime(end, '%Y-%m-%d %H:%M:%S') - datetime.strptime(start, '%Y-%m-%d %H:%M:%S'))
+        start_time = datetime.strptime(start, '%Y-%m-%d %H:%M:%S')
+    except ValueError:
+        return "undefined", "undefined"
+
+    try:
+        duration = str(datetime.strptime(end, '%Y-%m-%d %H:%M:%S') - start_time)
     except ValueError:
         duration = "undefined"
 
-    return duration
+    return datetime.strftime(start_time, "%H:%M"), duration
 
 
 def getDataFromTimetables(timetables: list, config: Config):
@@ -98,7 +103,7 @@ def getDataFromTimetables(timetables: list, config: Config):
                     continue
 
                 zug = root_trn.findall('Zug')[0]
-                duration = getDurationFromTimetableEntry(zug)
+                start_time, duration = getTimesFromTimetableEntry(zug)
                 fahrplanGruppe = zug.get('FahrplanGruppe')
 
                 if any([x.lower() in fahrplanGruppe.lower() for x in config.exclusionKeywords]):
@@ -108,6 +113,7 @@ def getDataFromTimetables(timetables: list, config: Config):
                     getCompletePackage(
                         service,
                         {
+                            "startzeit": start_time,
                             "fahrzeit": duration,
                             "gattung": zug.get('Gattung'),
                             "nummer": zug.get('Nummer'),
@@ -147,10 +153,10 @@ def createDatabaseWithData(data):
     try:
         cur.execute("DROP TABLE zugdienste")
     except sqlite3.OperationalError:
-        print("Unable to drop table, none present")
+        pass
 
-    cur.execute("CREATE TABLE zugdienste(name, country, route, fahrplan, fahrzeit, gattung, nummer, zuglauf, fahrplanGruppe, br)")
-    cur.executemany("INSERT INTO zugdienste VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", data)
+    cur.execute("CREATE TABLE zugdienste(name, country, route, fahrplan, startzeit, fahrzeit, gattung, nummer, zuglauf, fahrplanGruppe, br)")
+    cur.executemany("INSERT INTO zugdienste VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", data)
     con.commit()
 
     print("Zugdienste in Datenbank eingetragen.")
