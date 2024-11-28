@@ -47,8 +47,7 @@ def getTimetablesFromZusiFiles(config: Config) -> list:
 
                 for route in os.listdir(f'{cfgPath}/{country}'):  # looping routes
                     timetables.extend(
-                        [f.path[:-(len(config.datatype.timetable) + 1)] for f in
-                         os.scandir(f'{cfgPath}/{country}/{route}')
+                        [f.path[:-(len(config.datatype.timetable) + 1)] for f in os.scandir(f'{cfgPath}/{country}/{route}')
                          if config.datatype.timetable == f.path[-len(config.datatype.timetable):]]
                     )
     except FileNotFoundError as e:
@@ -132,16 +131,14 @@ def getDataFromTimetables(timetables: list, config: Config):
                 if any([x.lower() in zug.get('FahrplanGruppe').lower() for x in config.exclusionKeywords]):
                     continue
 
-                entry_list = zug.findall('FahrplanEintrag')
-                # planned_stops: list = [entry.get('Betrst') for entry in entry_list if entry.get('Ank')]
                 planned_stops, n_turnaorunds = getPlannedStoppsFromTimetable(type_tag)
 
                 start_time, duration = getTimesFromTimetableEntry(zug)
 
                 result.append(
                     {
-                        "gattung": zug.get('Gattung'),
-                        "zugnr": zug.get('Nummer'),
+                        "gattung": type_tag.get('Gattung'),
+                        "zugnr": type_tag.get('Nummer'),
                         "abfahrt": start_time,
                         "fahrzeit": duration,
                         "br": type_tag.get('BR'),
@@ -150,7 +147,7 @@ def getDataFromTimetables(timetables: list, config: Config):
                         "nhalte": len(planned_stops),
                         "nwendungen": n_turnaorunds,
                         **getServiceInfo(service),
-                        "zuglauf": zug.get('Zuglauf'),
+                        "zuglauf": type_tag.get('Zuglauf'),
                         "halte": ", ".join(planned_stops)
                     }
                 )
@@ -185,7 +182,6 @@ def createDatabaseWithData(data):
     table_name = f"_{datetime.now().strftime("%d_%m_%Y")}"
 
     try:
-        print(f"DROP TABLE {table_name}")
         cur.execute(f"DROP TABLE {table_name}")
     except sqlite3.OperationalError:
         pass
