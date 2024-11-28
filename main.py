@@ -109,7 +109,7 @@ def getDataFromTimetables(timetables: list, config: Config):
                 result.append(
                     {
                         "gattung": zug.get('Gattung'),
-                        "zugnummer": zug.get('Nummer'),
+                        "zugnr": zug.get('Nummer'),
                         "abfahrt": start_time,
                         "fahrzeit": duration,
                         "br": type_tag.get('BR'),
@@ -154,7 +154,7 @@ def createDatabaseWithData(data):
     except sqlite3.OperationalError:
         pass
 
-    cur.execute(f"CREATE TABLE {table_name}(gattung, zugnummer, abfahrt, fahrzeit, br, laenge, masse, country, route, fahrplan, zuglauf)")
+    cur.execute(f"CREATE TABLE {table_name}(gattung, zugnr, abfahrt, fahrzeit, br, laenge, masse, country, route, fahrplan, zuglauf)")
     cur.executemany(f"INSERT INTO {table_name} VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", data)
     con.commit()
 
