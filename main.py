@@ -47,7 +47,8 @@ def getTimetablesFromZusiFiles(config: Config) -> list:
 
                 for route in os.listdir(f'{cfgPath}/{country}'):  # looping routes
                     timetables.extend(
-                        [f.path[:-(len(config.datatype.timetable) + 1)] for f in os.scandir(f'{cfgPath}/{country}/{route}')
+                        [f.path[:-(len(config.datatype.timetable) + 1)] for f in
+                         os.scandir(f'{cfgPath}/{country}/{route}')
                          if config.datatype.timetable == f.path[-len(config.datatype.timetable):]]
                     )
     except FileNotFoundError as e:
@@ -84,6 +85,32 @@ def getTimesFromTimetableEntry(zug) -> (str, str):
     return datetime.strftime(start_time, "%H:%M"), duration
 
 
+def getPlannedStoppsFromTimetable(timetable) -> (list, int):
+    stopps: list[str] = []
+    rw: int = 0
+
+    for zeile in timetable.findall('FplZeile'):
+
+        name = zeile.findall('FplName')
+        if not name:
+            continue
+
+        ank = zeile.findall('FplAnk')
+        if not ank:
+            continue
+
+        abf = zeile.findall('FplAbf')
+        if not abf:
+            continue
+
+        stopps.append(name[0].get('FplNameText'))
+
+        if zeile.find('FplRichtungswechsel') is not None:
+            rw += 1
+
+    return stopps, rw
+
+
 def getDataFromTimetables(timetables: list, config: Config):
     result = []
 
@@ -101,10 +128,15 @@ def getDataFromTimetables(timetables: list, config: Config):
                     continue
 
                 zug = root_trn.findall('Zug')[0]
-                start_time, duration = getTimesFromTimetableEntry(zug)
 
                 if any([x.lower() in zug.get('FahrplanGruppe').lower() for x in config.exclusionKeywords]):
                     continue
+
+                entry_list = zug.findall('FahrplanEintrag')
+                # planned_stops: list = [entry.get('Betrst') for entry in entry_list if entry.get('Ank')]
+                planned_stops, n_turnaorunds = getPlannedStoppsFromTimetable(type_tag)
+
+                start_time, duration = getTimesFromTimetableEntry(zug)
 
                 result.append(
                     {
@@ -115,8 +147,11 @@ def getDataFromTimetables(timetables: list, config: Config):
                         "br": type_tag.get('BR'),
                         "laenge": int(float(type_tag.get('Laenge'))),
                         "masse": int(int(type_tag.get('Masse')) / 1000),
+                        "nhalte": len(planned_stops),
+                        "nwendungen": n_turnaorunds,
                         **getServiceInfo(service),
-                        "zuglauf": zug.get('Zuglauf')
+                        "zuglauf": zug.get('Zuglauf'),
+                        "halte": ", ".join(planned_stops)
                     }
                 )
 
@@ -150,12 +185,14 @@ def createDatabaseWithData(data):
     table_name = f"_{datetime.now().strftime("%d_%m_%Y")}"
 
     try:
+        print(f"DROP TABLE {table_name}")
         cur.execute(f"DROP TABLE {table_name}")
     except sqlite3.OperationalError:
         pass
 
-    cur.execute(f"CREATE TABLE {table_name}(gattung, zugnr, abfahrt, fahrzeit, br, laenge, masse, country, route, fahrplan, zuglauf)")
-    cur.executemany(f"INSERT INTO {table_name} VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", data)
+    cur.execute(
+        f"CREATE TABLE {table_name}(gattung, zugnr, abfahrt, fahrzeit, br, laenge, masse, nhalte, nwendungen, country, route, fahrplan, zuglauf, halte)")
+    cur.executemany(f"INSERT INTO {table_name} VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", data)
     con.commit()
 
     print("Zugdienste in Datenbank eingetragen.")
