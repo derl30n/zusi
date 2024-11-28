@@ -131,7 +131,7 @@ def getDataFromTimetables(timetables: list, config: Config):
                 if any([x.lower() in zug.get('FahrplanGruppe').lower() for x in config.exclusionKeywords]):
                     continue
 
-                planned_stops, n_turnaorunds = getPlannedStoppsFromTimetable(type_tag)
+                planned_stops, n_turnarounds = getPlannedStoppsFromTimetable(type_tag)
 
                 start_time, duration = getTimesFromTimetableEntry(zug)
 
@@ -145,7 +145,7 @@ def getDataFromTimetables(timetables: list, config: Config):
                         "laenge": int(float(type_tag.get('Laenge'))),
                         "masse": int(int(type_tag.get('Masse')) / 1000),
                         "nhalte": len(planned_stops),
-                        "nwendungen": n_turnaorunds,
+                        "nwendungen": n_turnarounds,
                         **getServiceInfo(service),
                         "zuglauf": type_tag.get('Zuglauf'),
                         "halte": ", ".join(planned_stops)
