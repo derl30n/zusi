@@ -88,7 +88,9 @@ def getPlannedStoppsFromTimetable(timetable) -> (list, int):
     stopps: list[str] = []
     rw: int = 0
 
-    for zeile in timetable.findall('FplZeile'):
+    zeilen = timetable.findall('FplZeile')
+
+    for zeile in zeilen:
 
         name = zeile.findall('FplName')
         if not name:
@@ -107,7 +109,7 @@ def getPlannedStoppsFromTimetable(timetable) -> (list, int):
         if zeile.find('FplRichtungswechsel') is not None:
             rw += 1
 
-    return stopps, rw
+    return stopps, rw, int(float(zeilen[-1].get('FplLaufweg')) / 1000)
 
 
 def getDataFromTimetables(timetables: list, config: Config):
@@ -131,7 +133,7 @@ def getDataFromTimetables(timetables: list, config: Config):
                 if any([x.lower() in zug.get('FahrplanGruppe').lower() for x in config.exclusionKeywords]):
                     continue
 
-                planned_stops, n_turnarounds = getPlannedStoppsFromTimetable(type_tag)
+                planned_stops, n_turnarounds, planned_distance = getPlannedStoppsFromTimetable(type_tag)
 
                 start_time, duration = getTimesFromTimetableEntry(zug)
 
@@ -146,6 +148,7 @@ def getDataFromTimetables(timetables: list, config: Config):
                         "masse": int(int(type_tag.get('Masse')) / 1000),
                         "nhalte": len(planned_stops),
                         "nwendungen": n_turnarounds,
+                        "s_km": planned_distance,
                         **getServiceInfo(service),
                         "zuglauf": type_tag.get('Zuglauf'),
                         "halte": ", ".join(planned_stops)
@@ -187,8 +190,8 @@ def createDatabaseWithData(data):
         pass
 
     cur.execute(
-        f"CREATE TABLE {table_name}(gattung, zugnr, abfahrt, fahrzeit, br, laenge, masse, nhalte, nwendungen, country, route, fahrplan, zuglauf, halte)")
-    cur.executemany(f"INSERT INTO {table_name} VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", data)
+        f"CREATE TABLE {table_name}(gattung, zugnr, abfahrt, fahrzeit, br, laenge, masse, nhalte, nwendungen, s_km, country, route, fahrplan, zuglauf, halte)")
+    cur.executemany(f"INSERT INTO {table_name} VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", data)
     con.commit()
 
     print("Zugdienste in Datenbank eingetragen.")
