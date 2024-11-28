@@ -25,16 +25,14 @@ def readFromJsonFile(filename: str, prefix: str = "") -> dict:
         return json.load(json_data_file)
 
 
-def getCompletePackage(string: str, attributes: dict) -> dict:
+def getServiceInfo(string: str) -> dict:
     serviceSplit = string.split('\\')
     trackSplit = serviceSplit[0].split("/")
 
     return {
-        "name": (serviceSplit[-1]).split(".")[0],
         "country": trackSplit[-2],
         "route": trackSplit[-1],
-        "fahrplan": serviceSplit[-2],
-        **attributes
+        "fahrplan": serviceSplit[-2]
     }
 
 
@@ -104,24 +102,22 @@ def getDataFromTimetables(timetables: list, config: Config):
 
                 zug = root_trn.findall('Zug')[0]
                 start_time, duration = getTimesFromTimetableEntry(zug)
-                fahrplanGruppe = zug.get('FahrplanGruppe')
 
-                if any([x.lower() in fahrplanGruppe.lower() for x in config.exclusionKeywords]):
+                if any([x.lower() in zug.get('FahrplanGruppe').lower() for x in config.exclusionKeywords]):
                     continue
 
                 result.append(
-                    getCompletePackage(
-                        service,
-                        {
-                            "startzeit": start_time,
-                            "fahrzeit": duration,
-                            "gattung": zug.get('Gattung'),
-                            "nummer": zug.get('Nummer'),
-                            "zuglauf": zug.get('Zuglauf'),
-                            "fahrplanGruppe": fahrplanGruppe,
-                            "br": type_tag.get('BR')
-                        }
-                    )
+                    {
+                        "gattung": zug.get('Gattung'),
+                        "zugnummer": zug.get('Nummer'),
+                        "abfahrt": start_time,
+                        "fahrzeit": duration,
+                        "br": type_tag.get('BR'),
+                        "laenge": int(float(type_tag.get('Laenge'))),
+                        "masse": int(int(type_tag.get('Masse')) / 1000),
+                        **getServiceInfo(service),
+                        "zuglauf": zug.get('Zuglauf')
+                    }
                 )
 
                 break
@@ -150,13 +146,16 @@ def extrapolateDataFromZusi() -> list:
 def createDatabaseWithData(data):
     con = sqlite3.connect("zugdienste.db")
     cur = con.cursor()
+
+    table_name = f"_{datetime.now().strftime("%d_%m_%Y")}"
+
     try:
-        cur.execute("DROP TABLE zugdienste")
+        cur.execute(f"DROP TABLE {table_name}")
     except sqlite3.OperationalError:
         pass
 
-    cur.execute("CREATE TABLE zugdienste(name, country, route, fahrplan, startzeit, fahrzeit, gattung, nummer, zuglauf, fahrplanGruppe, br)")
-    cur.executemany("INSERT INTO zugdienste VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", data)
+    cur.execute(f"CREATE TABLE {table_name}(gattung, zugnummer, abfahrt, fahrzeit, br, laenge, masse, country, route, fahrplan, zuglauf)")
+    cur.executemany(f"INSERT INTO {table_name} VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", data)
     con.commit()
 
     print("Zugdienste in Datenbank eingetragen.")
