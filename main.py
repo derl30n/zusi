@@ -56,7 +56,7 @@ def getTimetablesFromZusiFiles(config: Config) -> list:
     return timetables
 
 
-def getTimesFromTimetableEntry(zug) -> (str, str):
+def getTimesFromTimetableEntry(zug, distance: int) -> (str, str):
     start: str = ""
     end: str = ""
 
@@ -74,14 +74,20 @@ def getTimesFromTimetableEntry(zug) -> (str, str):
     try:
         start_time = datetime.strptime(start, '%Y-%m-%d %H:%M:%S')
     except ValueError:
-        return "undefined", "undefined"
+        return "undefined", "undefined", 0
+
+    duration = "undefined"
+    dv = 0
 
     try:
-        duration = str(datetime.strptime(end, '%Y-%m-%d %H:%M:%S') - start_time)
+        duration = datetime.strptime(end, '%Y-%m-%d %H:%M:%S') - start_time
+        dv = int((distance / duration.seconds) * 3.6)
     except ValueError:
-        duration = "undefined"
+        pass
+    except ZeroDivisionError:
+        pass
 
-    return datetime.strftime(start_time, "%H:%M"), duration
+    return datetime.strftime(start_time, "%H:%M"), str(duration), dv
 
 
 def getPlannedStoppsFromTimetable(timetable) -> (list, int):
@@ -109,7 +115,11 @@ def getPlannedStoppsFromTimetable(timetable) -> (list, int):
         if zeile.find('FplRichtungswechsel') is not None:
             rw += 1
 
-    return stopps, rw, int(float(zeilen[-1].get('FplLaufweg')) / 1000)
+    return stopps, rw, int(float(zeilen[-1].get('FplLaufweg')))
+
+
+def isServiceValid(service: str, flagged_words: list[str]) -> bool:
+    return not any([x.lower() in service.lower() for x in flagged_words])
 
 
 def getDataFromTimetables(timetables: list, config: Config):
@@ -117,7 +127,7 @@ def getDataFromTimetables(timetables: list, config: Config):
 
     for timetable in tqdm(timetables, desc="Durchsuche Fahrpläne nach Zugdiensten"):
         for service in [f.path for f in os.scandir(timetable) if config.datatype.service == f.path[-len(config.datatype.service):]]:
-            if any([x.lower() in service.lower() for x in config.exclusionKeywords]):
+            if not isServiceValid(service, config.exclusionKeywords):
                 continue
 
             root = Et.parse(service).getroot()
@@ -130,12 +140,13 @@ def getDataFromTimetables(timetables: list, config: Config):
 
                 zug = root_trn.findall('Zug')[0]
 
-                if any([x.lower() in zug.get('FahrplanGruppe').lower() for x in config.exclusionKeywords]):
+                if not isServiceValid(zug.get('FahrplanGruppe'), config.exclusionKeywords):
                     continue
 
                 planned_stops, n_turnarounds, planned_distance = getPlannedStoppsFromTimetable(type_tag)
 
-                start_time, duration = getTimesFromTimetableEntry(zug)
+                # TODO: re-work
+                start_time, duration, dv = getTimesFromTimetableEntry(zug, planned_distance)
 
                 result.append(
                     {
@@ -148,7 +159,8 @@ def getDataFromTimetables(timetables: list, config: Config):
                         "masse": int(int(type_tag.get('Masse')) / 1000),
                         "nhalte": len(planned_stops),
                         "nwendungen": n_turnarounds,
-                        "s_km": planned_distance,
+                        "s_km": int(planned_distance / 1000),
+                        "dv": dv,
                         **getServiceInfo(service),
                         "zuglauf": type_tag.get('Zuglauf'),
                         "halte": ", ".join(planned_stops)
@@ -190,8 +202,8 @@ def createDatabaseWithData(data):
         pass
 
     cur.execute(
-        f"CREATE TABLE {table_name}(gattung, zugnr, abfahrt, fahrzeit, br, laenge, masse, nhalte, nwendungen, s_km, country, route, fahrplan, zuglauf, halte)")
-    cur.executemany(f"INSERT INTO {table_name} VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", data)
+        f"CREATE TABLE {table_name}(gattung, zugnr, abfahrt, fahrzeit, br, laenge, masse, nhalte, nwendungen, s_km, dv, country, route, fahrplan, zuglauf, halte)")
+    cur.executemany(f"INSERT INTO {table_name} VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", data)
     con.commit()
 
     print("Zugdienste in Datenbank eingetragen.")
