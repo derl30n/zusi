@@ -9,15 +9,22 @@ from tqdm import tqdm
 
 @dataclass(frozen=True)
 class ServiceEntry:
-    name: str
-    timeArr: datetime | None
-    timeDep: datetime | None
-    isTurnAround: bool
-    isPlannedStop: bool
-    runningDistance: int
+    name: str = field(compare=True)
+    timeArr: datetime | None = field(compare=False)
+    timeDep: datetime | None = field(compare=False)
+    isTurnAround: bool = field(compare=False)
+    isPlannedStop: bool = field(compare=False)
+    runningDistance: int = field(compare=False)
+    # isValid: bool = field(compare=False)
+
+    # def __post_init__(self) -> None:
+    #     self.isValid = all([self.timeDep, self.runningDistance])
 
     def isValid(self) -> bool:
         return all([self.timeDep, self.runningDistance])
+
+    def isAtPlatform(self) -> bool:
+        return self.timeArr is not None
 
 
 class ServiceData:
@@ -48,7 +55,14 @@ class ServiceData:
                 self.start = scheduleEntry
 
             if scheduleEntry.isPlannedStop:
-                if len(self.plannedStopps) > 0 and self.plannedStopps[-1].name == scheduleEntry.name:
+                isPlannedStoppsPopulated = len(self.plannedStopps) > 0
+
+                # Do not add the entry point as a planned stop
+                if not isPlannedStoppsPopulated and scheduleEntry == self.start:
+                    continue
+
+                # Do not add the previous stopp again
+                if isPlannedStoppsPopulated and scheduleEntry == self.plannedStopps[-1]:
                     continue
 
                 self.plannedStopps.append(scheduleEntry)
@@ -108,15 +122,6 @@ class ServiceData:
 
         return int((self.end.runningDistance / duration) * 3.6)
 
-    def isStartAtPlatform(self) -> bool:
-        return self._isPointAtPlatform(self.start, 0)
-
-    def isEndAtPlatform(self) -> bool:
-        return self._isPointAtPlatform(self.end, -1)
-
-    def _isPointAtPlatform(self, point: ServiceEntry, index: int) -> bool:
-        return len(self.plannedStopps) > 0 and point.name == self.plannedStopps[index].name
-
 
 @dataclass(frozen=True)
 class Datatypes:
@@ -171,7 +176,7 @@ def isServiceValid(service: str, flagged_words: list[str]) -> bool:
     return not any([x.lower() in service.lower() for x in flagged_words])
 
 
-def getDataFromTimetables(timetables: list, config: Config):
+def getDataFromTimetables(timetables: list, config: Config) -> list[dict]:
     result = []
 
     for timetable in tqdm(timetables, desc="Durchsuche Fahrpläne nach Zugdiensten"):
@@ -203,6 +208,7 @@ def getDataFromTimetables(timetables: list, config: Config):
                 start_time = serviceData.getStartTimeFormatted()
                 duration = str(serviceData.getDuration())
                 dv = serviceData.getAvgSpeed()
+                agp = serviceData.start.name
 
                 result.append(
                     {
@@ -215,11 +221,12 @@ def getDataFromTimetables(timetables: list, config: Config):
                         "masse": int(int(type_tag.get('Masse')) / 1000),
                         "nhalte": len(planned_stops),
                         "w1": n_turnarounds,
-                        "v3": serviceData.isStartAtPlatform(),
-                        "a3": serviceData.isEndAtPlatform(),
+                        "v3": serviceData.start.isAtPlatform(),
+                        "a3": serviceData.end.isAtPlatform(),
                         "s_km": int(planned_distance / 1000),
                         "dv": dv,
                         **getServiceInfo(service),
+                        "aufgleispunkt": agp,
                         "zuglauf": type_tag.get('Zuglauf'),
                         "halte": ", ".join(planned_stops)
                     }
@@ -230,7 +237,7 @@ def getDataFromTimetables(timetables: list, config: Config):
     return result
 
 
-def extrapolateDataFromZusi() -> list:
+def extrapolateDataFromZusi() -> list[dict]:
     res = readFromJsonFile("config")
 
     config = Config(
@@ -248,7 +255,7 @@ def extrapolateDataFromZusi() -> list:
     return result
 
 
-def createDatabaseWithData(data):
+def createDatabaseWithData(keys: dict.keys, data: list[tuple]):
     con = sqlite3.connect("zugdienste.db")
     cur = con.cursor()
 
@@ -259,16 +266,23 @@ def createDatabaseWithData(data):
     except sqlite3.OperationalError:
         pass
 
+    keys_string: str = ", ".join(keys)
+    values_string: str = ", ".join("?" for _ in range(len(keys)))
+
     cur.execute(
-        f"CREATE TABLE {table_name}(gattung, zugnr, begin, fahrzeit, br, laenge, masse, nhalte, w1, v3, a3, s_km, dv, country, route, fahrplan, zuglauf, halte)")
-    cur.executemany(f"INSERT INTO {table_name} VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", data)
+        f"CREATE TABLE {table_name}({keys_string})")
+    cur.executemany(f"INSERT INTO {table_name} VALUES({values_string})", data)
     con.commit()
 
     print("Zugdienste in Datenbank eingetragen.")
 
 
 def main():
-    createDatabaseWithData(tuple(entry.values()) for entry in extrapolateDataFromZusi())
+    data: list[dict] = extrapolateDataFromZusi()
+    keys: dict.keys = data[0].keys()
+    values: list[tuple] = [tuple(entry.values()) for entry in data]
+
+    createDatabaseWithData(keys, values)
 
 
 if __name__ == '__main__':
