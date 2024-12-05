@@ -236,34 +236,37 @@ class Service:
 
         for entry in trn_rows:
             trn_current_index += 1
-            entry_trn = EntryTrn(entry)
+            entry_trn: EntryTrn = EntryTrn(entry)
 
             if not entry_trn.isValid:
                 continue
 
             index: int = 0
-            # TODO: fix potential index out of range error
+
             for i, entry_tt in enumerate(timetable_rows[last_valid_index:]):
-                entry_timetable = EntryTimetable(entry_tt)
+                entry_timetable: EntryTimetable = EntryTimetable(entry_tt)
 
                 # memorize index so we are not checking the same invalid entries over and over
                 if not entry_timetable.isValid:
                     index = i
                     continue
 
+                hasMatchingName: bool = entry_timetable.name == entry_trn.name or entry_trn.name in entry_timetable.name
+
                 # prevent the timetable list from "overtaking" the trn list
-                if entry_timetable.timeDep > entry_trn.timeDep:
+                # HOWEVER, !!EXCEPTION!! ignore if it's the name we are looking for -.-
+                if entry_timetable.timeDep > entry_trn.timeDep and not hasMatchingName:
                     break
 
                 index = i
 
                 if not entry_timetable.isPlannedStop:
-                    if entry_timetable.name == entry_trn.name or entry_trn.name in entry_timetable.name:
+                    if hasMatchingName:
                         break
                     continue
 
                 # Ensure the planned stop fitting our time frame has also the correct name
-                if entry_timetable.name != entry_trn.name and entry_trn.name not in entry_timetable.name:
+                if not hasMatchingName:
                     continue
 
                 self._plannedStopps.append(entry_timetable)
@@ -284,7 +287,7 @@ class Service:
 
     def _findEnd(self, timetable_rows: list, isLastTrnIndexUsed: bool, trn_last) -> None:
         # is schedule completely populated? -> last entry = end
-        if isLastTrnIndexUsed == 0 and len(self._plannedStopps) > 0:
+        if isLastTrnIndexUsed and len(self._plannedStopps) > 0:
             self._end = self._plannedStopps[-1]
             self._validate()
 
