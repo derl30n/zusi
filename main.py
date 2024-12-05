@@ -3,135 +3,44 @@ import os
 import sqlite3
 import xml.etree.ElementTree as Et
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 from tqdm import tqdm
 
 
-# TODO: make frozen again, however currently not possible due to post init
-@dataclass(slots=True)
-class ServiceEntry:
-    name: str = field(compare=True)
-    timeArr: datetime | None = field(compare=False)
-    timeDep: datetime | None = field(compare=False)
-    isTurnAround: bool = field(compare=False)
-    isPlannedStop: bool = field(compare=False)
-    runningDistance: int = field(compare=False)
-    isValid: bool = field(init=False, compare=False)
-
-    def __post_init__(self):
-        self.isValid = all([self.timeDep, self.runningDistance])
-
-    def isAtPlatform(self) -> bool:
-        return self.timeArr is not None
+# Error Codes
+# 99 -> less than two entries in trn | at least two are required for a valid schedule
+#  1 -> failed health check (invalid trn start or end)
+#  0 -> no valid start/entry found in timetable
+#  2 -> no remaining timetable entries after start has been defined
 
 
-@dataclass(slots=True)
-class ServiceEntryBlank(ServiceEntry):
-    name: str = field(default_factory=str, compare=True)
-    timeArr: None = field(default=None, compare=False)
-    timeDep: None = field(default=None, compare=False)
-    isTurnAround: bool = field(default_factory=bool, compare=False)
-    isPlannedStop: bool = field(default_factory=bool, compare=False)
-    runningDistance: int = field(default_factory=int, compare=False)
-    isValid: bool = field(default_factory=bool, init=False, compare=False)
+class Entry:
+    __slots__ = (
+        'name',
+        'timeArr',
+        'timeDep',
+        'isPlannedStop',
+        'isValid',
+        'hasArrivalTime'
+    )
 
+    name: str
+    timeArr: datetime | None
+    timeDep: datetime | None
+    isPlannedStop: bool
+    isValid: bool
+    hasArrivalTime: bool
 
-@dataclass(slots=True)
-class ServiceDetails:
-    gattung: str = field(default=None, init=False)
-    zugnr: str = field(default=None, init=False)
-    br: str = field(default=None, init=False)
-    laenge: int = field(default=None, init=False)
-    masse: int = field(default=None, init=False)
-    zuglauf: str = field(default=None, init=False)
-    turnarounds: int = field(init=False, default_factory=int)
+    def __init__(self, name: str, timeArr: datetime | None, timeDep: datetime | None):
+        self.name = name
+        self.timeArr = timeArr
+        self.timeDep = timeDep
+        self.isPlannedStop = all([name, timeArr, timeDep])
+        self.isValid = all([name, timeDep])
+        self.hasArrivalTime = timeArr is not None
 
-    def set(self, schedule) -> None:
-        if self.gattung is None:
-            self.gattung = schedule.get('Gattung')
-            self.zugnr = schedule.get('Nummer')
-            self.br = schedule.get('BR')
-            self.laenge = int(float(schedule.get('Laenge')))
-            self.masse = int(int(schedule.get('Masse')) / 1000)
-            self.zuglauf = schedule.get('Zuglauf')
-            self.turnarounds = 0
-
-            return
-
-        self.turnarounds += 1
-        self.zugnr = f"{self.zugnr}_{schedule.get('Nummer')}"
-        self.zuglauf = f"{self.zuglauf} -> {schedule.get('Zuglauf')}"
-
-
-@dataclass
-class ServiceData:
-    start: ServiceEntry = field(init=False, default_factory=ServiceEntryBlank)
-    end: ServiceEntry = field(init=False, default_factory=ServiceEntryBlank)
-    plannedStopps: list = field(init=False, default_factory=list)
-    # turnarounds: int = field(init=False, default_factory=int)
-    isValid: bool = field(init=False, default=False)
-    zugDetails: ServiceDetails = field(init=False, default_factory=ServiceDetails)
-
-    def constructService(self, schedule) -> None:
-        self.zugDetails.set(schedule)
-
-        entries = schedule.findall('FplZeile')
-
-        if not len(entries) > 0:
-            return
-
-        for entry in entries:
-            scheduleEntry = self._getScheduleEntryFromEntry(entry)
-
-            if not scheduleEntry.isValid:
-                continue
-
-            self.end = scheduleEntry
-
-            if not self.start.isValid:
-                self.start = scheduleEntry
-
-            if scheduleEntry.isPlannedStop:
-                isPlannedStoppsPopulated = len(self.plannedStopps) > 0
-
-                # Do not add the entry point as a planned stop
-                if not isPlannedStoppsPopulated and scheduleEntry == self.start:
-                    continue
-
-                # Do not add the previous stopp again
-                if isPlannedStoppsPopulated and scheduleEntry == self.plannedStopps[-1]:
-                    continue
-
-                self.plannedStopps.append(scheduleEntry)
-
-            # TODO: does a turnaround also need to be planned stop?
-            if scheduleEntry.isTurnAround:
-                # self.turnarounds += 1
-                self.zugDetails.turnarounds += 1
-
-        self.isValid = self.start.isValid and self.end.isValid
-
-    def _getScheduleEntryFromEntry(self, entry) -> ServiceEntry:
-        dist = entry.get('FplLaufweg')
-        name = entry.findall('FplName')
-        arr = entry.findall('FplAnk')
-        dep = entry.findall('FplAbf')
-
-        isTA = entry.find('FplRichtungswechsel') is not None
-        isPS = all([name, arr, dep])
-        distInt = int(float(dist)) if dist is not None else 0
-        nameStr = name[0].get('FplNameText') if len(name) > 0 else None
-        arrStr = self.getTime(arr[0].get('Ank')) if len(arr) > 0 else None
-        depStr = self.getTime(dep[0].get('Abf')) if len(dep) > 0 else None
-
-        return ServiceEntry(
-            nameStr,
-            arrStr,
-            depStr,
-            isTA,
-            isPS,
-            distInt
-        )
+    def __cmp__(self, other) -> bool:
+        return self.name == other.name
 
     @staticmethod
     def getTime(timeString: str | None) -> datetime | None:
@@ -141,24 +50,283 @@ class ServiceData:
         try:
             return datetime.strptime(timeString, '%Y-%m-%d %H:%M:%S')
         except ValueError:
-            return None
+            return datetime.strptime(timeString, '%Y-%m-%d')
 
-    def getPlannedStopNamesAsList(self) -> list[str]:
-        return [entry.name for entry in self.plannedStopps]
 
-    def getStartTimeFormatted(self) -> str:
-        return datetime.strftime(self.start.timeDep, "%H:%M")
+class EntryPlaceholder(Entry):
+    def __init__(self):
+        super().__init__(name="", timeArr=None, timeDep=None)
 
-    def getDuration(self) -> timedelta:
-        return self.end.timeDep - self.start.timeDep
 
-    def getAvgSpeed(self) -> int:
-        duration = self.getDuration().seconds
+class EntryTimetable(Entry):
+    __slots__ = (
+        'isTurnAround',
+        'runningDistance'
+    )
 
-        if duration == 0:
-            return 0
+    isTurnAround: bool
+    runningDistance: int
 
-        return int((self.end.runningDistance / duration) * 3.6)
+    def __init__(self, rawEntry):
+        dist = rawEntry.get('FplLaufweg')
+        name = rawEntry.findall('FplName')
+        arr = rawEntry.findall('FplAnk')
+        dep = rawEntry.findall('FplAbf')
+
+        self.isTurnAround = rawEntry.find('FplRichtungswechsel') is not None
+        self.runningDistance = int(float(dist)) if dist is not None else 0
+
+        nameStr = name[0].get('FplNameText') if len(name) > 0 else None
+        arrStr = self.getTime(arr[0].get('Ank')) if len(arr) > 0 else None
+        depStr = self.getTime(dep[0].get('Abf')) if len(dep) > 0 else arrStr
+
+        super().__init__(name=nameStr, timeArr=arrStr, timeDep=depStr)
+
+    def override(self, other: Entry) -> None:
+        self.name = other.name
+        self.timeArr = other.timeArr
+        self.timeDep = other.timeDep
+        self.isValid = True
+
+
+class EntryTrn(Entry):
+    __slots__ = 'hasEvent'
+
+    hasEvent: bool
+
+    def __init__(self, rawEntry):
+        name = rawEntry.get('Betrst')
+        arr = self.getTime(rawEntry.get('Ank'))
+        dep = self.getTime(rawEntry.get('Abf'))
+
+        self.hasEvent = len(rawEntry.findall('Ereignis')) > 0
+
+        super().__init__(name=name, timeArr=arr, timeDep=dep)
+
+
+class Service:
+    __slots__ = (
+        'isValid',
+        '_start',
+        '_end',
+        '_plannedStopps',
+        '_turnarounds',
+        '_hasEvent',
+        '_gattung',
+        '_zugnr',
+        '_br',
+        '_laenge',
+        '_masse',
+        '_zuglauf',
+        '_country',
+        '_route',
+        '_fahrplan'
+    )
+
+    isValid: bool
+
+    _start: EntryTimetable | EntryPlaceholder
+    _end: EntryTimetable | EntryPlaceholder
+    _plannedStopps: list[EntryTimetable]
+    _turnarounds: int
+    _hasEvent: bool
+
+    _gattung: str
+    _zugnr: str
+    _br: str
+    _laenge: int
+    _masse: int
+    _zuglauf: str
+
+    _country: str
+    _route: str
+    _fahrplan: str
+
+    def __init__(self, service: str, schedule, trn):
+        self.isValid = False
+        self._start = EntryPlaceholder()
+        self._end = EntryPlaceholder()
+        self._plannedStopps = []
+        self._turnarounds = 0
+        self._hasEvent = False
+
+        timetable_list = schedule.findall('Buchfahrplan')
+        timetable_rows = [entry for row in timetable_list for entry in row.findall("FplZeile")]
+        trn_rows = trn.findall('FahrplanEintrag')
+
+        if len(timetable_rows) < 2 or len(trn_rows) < 2:
+            # print(99, trn.findall('BuchfahrplanRohDatei')[0].get('Dateiname'))
+            return
+
+        self._findStart(timetable_rows, trn_rows)
+
+        if not self._start.isValid:
+            return
+
+        if not self.isValid:
+            return
+
+        initial_timetable = timetable_list[0]
+        self._gattung = initial_timetable.get('Gattung')
+        self._zugnr = initial_timetable.get('Nummer')
+        self._br = initial_timetable.get('BR')
+        self._laenge = int(float(initial_timetable.get('Laenge')))
+        self._masse = int(int(initial_timetable.get('Masse')) / 1000)
+        self._zuglauf = initial_timetable.get('Zuglauf')
+
+        for timetable in timetable_list[1:]:
+            self._zugnr = f"{self._zugnr}_{timetable.get('Nummer')}"
+            self._zuglauf = f"{self._zuglauf} -> {timetable.get('Zuglauf')}"
+
+        serviceSplit = service.split('\\')
+        trackSplit = serviceSplit[0].split("/")
+
+        self._country = trackSplit[-2]
+        self._route = trackSplit[-1]
+        self._fahrplan = serviceSplit[-2]
+
+    def _findStart(self, timetable_rows: list, trn_rows: list) -> None:
+        start_trn = EntryTrn(trn_rows[0])
+        end_trn = EntryTrn(trn_rows[-1])
+
+        if not start_trn.isValid or not end_trn.isValid:
+            # print(1, start_trn.name, start_trn.timeDep)
+            return
+
+        # On rare occasions timeArr is not defined on first entry in trn
+        if not start_trn.hasArrivalTime:
+            start_trn.timeArr = start_trn.timeDep
+
+        running_index_timetable: int = -1
+        for i, row in enumerate(timetable_rows):
+            entry = EntryTimetable(row)
+
+            if not entry.isValid:
+                continue
+
+            self._start = entry
+            running_index_timetable = i + 1
+
+            break
+
+        if not self._start.isValid:
+            # print(0)
+            return
+
+        if not self._start.name == start_trn.name:
+            self._start.override(start_trn)
+            running_index_timetable = 0
+
+        # exclude already "checked" rows -> only pass unchecked rows
+        remaining_timetable_rows = timetable_rows[running_index_timetable:]
+
+        if len(remaining_timetable_rows) == 0:
+            # print(2)
+            return
+
+        self._findPlannedStopps(remaining_timetable_rows, trn_rows[1:])
+
+    def _findPlannedStopps(self, timetable_rows: list, trn_rows: list) -> None:
+        trn_current_index: int = -1
+        last_valid_index: int = 0
+
+        for entry in trn_rows:
+            trn_current_index += 1
+            entry_trn = EntryTrn(entry)
+
+            if not entry_trn.isValid:
+                continue
+
+            index: int = 0
+            # TODO: fix potential index out of range error
+            for i, entry_tt in enumerate(timetable_rows[last_valid_index + 1:]):
+                entry_timetable = EntryTimetable(entry_tt)
+
+                # memorize index so we are not checking the same invalid entries over and over
+                if not entry_timetable.isValid:
+                    index = i
+                    continue
+
+                # prevent the timetable list "overtaking" the trn list
+                if entry_timetable.timeDep > entry_trn.timeDep:
+                    break
+
+                index = i
+
+                if not entry_timetable.name == entry_trn.name:
+                    continue
+
+                if not entry_timetable.isPlannedStop:
+                    continue
+
+                self._plannedStopps.append(entry_timetable)
+                self._turnarounds += entry_timetable.isTurnAround
+
+            last_valid_index += index
+
+            # if there is an event set, we can no longer check reliably for planned stopps
+            if entry_trn.hasEvent:
+                self._hasEvent = True
+                break
+
+        isLastTrnIndexUsed = len(trn_rows) == trn_current_index + 1
+
+        self._findEnd(timetable_rows, isLastTrnIndexUsed, trn_rows[-1])
+
+    def _findEnd(self, timetable_rows: list, isLastTrnIndexUsed: bool, trn_last) -> None:
+        # is schedule completely populated? -> last entry = end
+        if isLastTrnIndexUsed == 0 and len(self._plannedStopps) > 0:
+            self._end = self._plannedStopps[-1]
+            self._validate()
+
+            return
+
+        for row in reversed(timetable_rows[-5:]):
+            entry = EntryTimetable(row)
+
+            if not entry.isValid:
+                continue
+
+            self._end = entry
+            break
+
+        trn_end = EntryTrn(trn_last)
+
+        if not self._end.isValid or self._end.name != trn_end.name:
+            self._end = EntryTimetable(timetable_rows[-1])
+            self._end.override(trn_end)
+
+        self._validate()
+        return
+
+    def _validate(self) -> None:
+        self.isValid = self._start.isValid and self._end.isValid
+
+    def getAsDict(self) -> dict:
+        duration = self._end.timeDep - self._start.timeDep
+        dv = 0 if duration.seconds == 0 else int((self._end.runningDistance / duration.seconds) * 3.6)
+
+        return {
+            "gattung": self._gattung,
+            "zugnr": self._zugnr,
+            "begin": datetime.strftime(self._start.timeDep, "%H:%M"),
+            "fahrzeit": str(duration),
+            "br": self._br,
+            "laenge": self._laenge,
+            "masse": self._masse,
+            "nhalte": len(self._plannedStopps),
+            "w1": self._turnarounds,
+            "v3": self._start.isPlannedStop,
+            "a3": self._start.isPlannedStop,
+            "s_km": int(self._end.runningDistance / 1000),
+            "dv": dv,
+            "country": self._country,
+            "route": self._route,
+            "fahrplan": self._fahrplan,
+            "aufgleispunkt": self._start.name,
+            "zuglauf": self._zuglauf,
+            "halte": ", ".join(stopp.name for stopp in self._plannedStopps)
+        }
 
 
 @dataclass(frozen=True)
@@ -177,17 +345,6 @@ class Config:
 def readFromJsonFile(filename: str, prefix: str = "") -> dict:
     with open(f'{prefix}{filename}.json', "r") as json_data_file:
         return json.load(json_data_file)
-
-
-def getServiceInfo(string: str) -> dict:
-    serviceSplit = string.split('\\')
-    trackSplit = serviceSplit[0].split("/")
-
-    return {
-        "country": trackSplit[-2],
-        "route": trackSplit[-1],
-        "fahrplan": serviceSplit[-2]
-    }
 
 
 def getTimetablesFromZusiFiles(config: Config) -> list:
@@ -228,53 +385,22 @@ def getDataFromTimetables(timetables: list, config: Config) -> list[dict]:
             root = Et.parse(service).getroot()
 
             try:
-                root_trn = Et.parse(f'{service[:-13]}trn').getroot()
+                trn_root = Et.parse(f'{service[:-13]}trn').getroot()
             except FileNotFoundError:
                 continue
 
-            if not isServiceValid(root_trn.findall('Zug')[0].get('FahrplanGruppe'), config.exclusionKeywords):
+            trn_zug = trn_root.findall('Zug')[0]
+
+            if not isServiceValid(trn_zug.get('FahrplanGruppe'), config.exclusionKeywords):
                 continue
 
-            serviceData = ServiceData()
+            extractedService = Service(service, root, trn_zug)
 
-            for type_tag in root.findall('Buchfahrplan'):
-                serviceData.constructService(type_tag)
-
-            if not serviceData.isValid:
+            if not extractedService.isValid:
                 errors.append(service)
                 continue
 
-            planned_stops = serviceData.getPlannedStopNamesAsList()
-            # n_turnarounds = serviceData.turnarounds
-            n_turnarounds = serviceData.zugDetails.turnarounds
-            planned_distance = serviceData.end.runningDistance
-
-            start_time = serviceData.getStartTimeFormatted()
-            duration = str(serviceData.getDuration())
-            dv = serviceData.getAvgSpeed()
-            agp = serviceData.start.name
-
-            result.append(
-                {
-                    "gattung": serviceData.zugDetails.gattung,
-                    "zugnr": serviceData.zugDetails.zugnr,
-                    "begin": start_time,
-                    "fahrzeit": duration,
-                    "br": serviceData.zugDetails.br,
-                    "laenge": serviceData.zugDetails.laenge,
-                    "masse": serviceData.zugDetails.masse,
-                    "nhalte": len(planned_stops),
-                    "w1": n_turnarounds,
-                    "v3": serviceData.start.isAtPlatform(),
-                    "a3": serviceData.end.isAtPlatform(),
-                    "s_km": int(planned_distance / 1000),
-                    "dv": dv,
-                    **getServiceInfo(service),
-                    "aufgleispunkt": agp,
-                    "zuglauf": serviceData.zugDetails.zuglauf,
-                    "halte": ", ".join(planned_stops)
-                }
-            )
+            result.append(extractedService.getAsDict())
 
     print(f"{len(errors)} ungültige Zugdienste ausgeschlossen.")
 
