@@ -253,7 +253,8 @@ class Service:
 
                 index = i
 
-                if entry_timetable.name != entry_trn.name:
+                # names in the trn file are missing additional information such as gbf
+                if entry_timetable.name != entry_trn.name and entry_trn.name not in entry_timetable.name:
                     continue
 
                 if not entry_timetable.isPlannedStop:
