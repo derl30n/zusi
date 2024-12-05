@@ -239,7 +239,7 @@ class Service:
 
             index: int = 0
             # TODO: fix potential index out of range error
-            for i, entry_tt in enumerate(timetable_rows[last_valid_index + 1:]):
+            for i, entry_tt in enumerate(timetable_rows[last_valid_index:]):
                 entry_timetable = EntryTimetable(entry_tt)
 
                 # memorize index so we are not checking the same invalid entries over and over
@@ -253,7 +253,7 @@ class Service:
 
                 index = i
 
-                if not entry_timetable.name == entry_trn.name:
+                if entry_timetable.name != entry_trn.name:
                     continue
 
                 if not entry_timetable.isPlannedStop:
@@ -262,7 +262,9 @@ class Service:
                 self._plannedStopps.append(entry_timetable)
                 self._turnarounds += entry_timetable.isTurnAround
 
-            last_valid_index += index
+                break
+
+            last_valid_index += index + 1
 
             # if there is an event set, we can no longer check reliably for planned stopps
             if entry_trn.hasEvent:
