@@ -87,6 +87,7 @@ class EntryTimetable(Entry):
         self.timeArr = other.timeArr
         self.timeDep = other.timeDep
         self.isValid = True
+        self.isPlannedStop = False
 
 
 class EntryTrn(Entry):
@@ -213,6 +214,9 @@ class Service:
             # print(0)
             return
 
+        if (start_trn.timeDep - start_trn.timeArr).seconds > 60:
+            self._start.isPlannedStop = True
+
         if not self._start.name == start_trn.name:
             self._start.override(start_trn)
             running_index_timetable = 0
@@ -247,17 +251,19 @@ class Service:
                     index = i
                     continue
 
-                # prevent the timetable list "overtaking" the trn list
+                # prevent the timetable list from "overtaking" the trn list
                 if entry_timetable.timeDep > entry_trn.timeDep:
                     break
 
                 index = i
 
-                # names in the trn file are missing additional information such as gbf
-                if entry_timetable.name != entry_trn.name and entry_trn.name not in entry_timetable.name:
+                if not entry_timetable.isPlannedStop:
+                    if entry_timetable.name == entry_trn.name or entry_trn.name in entry_timetable.name:
+                        break
                     continue
 
-                if not entry_timetable.isPlannedStop:
+                # Ensure the planned stop fitting our time frame has also the correct name
+                if entry_timetable.name != entry_trn.name and entry_trn.name not in entry_timetable.name:
                     continue
 
                 self._plannedStopps.append(entry_timetable)
