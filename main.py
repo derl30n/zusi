@@ -456,20 +456,19 @@ def createDatabaseWithData(keys: dict.keys, data: list[tuple]):
     con = sqlite3.connect("zugdienste.db")
     cur = con.cursor()
 
-    table_name = f"_{datetime.now().strftime("%d_%m_%Y")}"
-
-    try:
-        cur.execute(f"DROP TABLE {table_name}")
-    except sqlite3.OperationalError:
-        pass
-
     keys_string: str = ", ".join(keys)
     values_string: str = ", ".join("?" for _ in range(len(keys)))
 
-    cur.execute(
-        f"CREATE TABLE {table_name}({keys_string})")
-    cur.executemany(f"INSERT INTO {table_name} VALUES({values_string})", data)
-    con.commit()
+    for table_name in ["_00_latest", f"_{datetime.now().strftime("%d_%m_%Y")}"]:
+        try:
+            cur.execute(f"DROP TABLE {table_name}")
+        except sqlite3.OperationalError:
+            pass
+
+        cur.execute(
+            f"CREATE TABLE {table_name}({keys_string})")
+        cur.executemany(f"INSERT INTO {table_name} VALUES({values_string})", data)
+        con.commit()
 
     print("Zugdienste in Datenbank eingetragen.")
 
