@@ -159,14 +159,6 @@ class Service:
             # print(99, trn.findall('BuchfahrplanRohDatei')[0].get('Dateiname'))
             return
 
-        self._findStart(timetable_rows, trn_rows)
-
-        if not self._start.isValid:
-            return
-
-        if not self.isValid:
-            return
-
         initial_timetable = timetable_list[0]
         self._gattung = initial_timetable.get('Gattung')
         self._zugnr = initial_timetable.get('Nummer')
@@ -185,6 +177,8 @@ class Service:
         self._country = trackSplit[-2]
         self._route = trackSplit[-1]
         self._fahrplan = serviceSplit[-2]
+
+        self._findStart(timetable_rows, trn_rows)
 
     def _findStart(self, timetable_rows: list, trn_rows: list) -> None:
         start_trn = EntryTrn(trn_rows[0])
@@ -214,12 +208,11 @@ class Service:
             # print(0)
             return
 
-        if (start_trn.timeDep - start_trn.timeArr).seconds > 60:
-            self._start.isPlannedStop = True
-
         if not self._start.name == start_trn.name:
             self._start.override(start_trn)
             running_index_timetable = 0
+
+        self._validateStartIsInStation()
 
         # exclude already "checked" rows -> only pass unchecked rows
         remaining_timetable_rows = timetable_rows[running_index_timetable:]
@@ -308,11 +301,32 @@ class Service:
             self._end = EntryTimetable(timetable_rows[-1])
             self._end.override(trn_end)
 
+        self._validateEndIsInStation()
+
         self._validate()
         return
 
     def _validate(self) -> None:
         self.isValid = self._start.isValid and self._end.isValid
+
+    def _validateStartIsInStation(self) -> None:
+        self._validateEntryIsInStation(entry=self._start, index=0)
+
+    def _validateEndIsInStation(self) -> None:
+        self._validateEntryIsInStation(entry=self._end, index=1)
+
+    def _validateEntryIsInStation(self, entry: EntryTimetable, index: int) -> None:
+        if self._zuglauf is None:
+            return
+
+        split: list[str] = self._zuglauf.split("-")
+
+        if len(split) < 2:
+            return
+
+        name: str = split[index].strip()
+
+        entry.isPlannedStop = entry.name.strip() == name
 
     def getAsDict(self) -> dict:
         duration = self._end.timeDep - self._start.timeDep
