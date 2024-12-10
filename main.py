@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import sqlite3
 import xml.etree.ElementTree as Et
 from dataclasses import dataclass, field
@@ -12,6 +13,20 @@ from tqdm import tqdm
 #  1 -> failed health check (invalid trn start or end)
 #  0 -> no valid start/entry found in timetable
 #  2 -> no remaining timetable entries after start has been defined
+
+
+# Formate:
+# einfacher name = durchgehender string e.g. "Salzkotten"
+# komplexer name = mehrere str e.g. "Aachen HBF" oder auch "Aachen West" oder "Au (Sieg)"
+# gbf = name + str e.g. "Hildesheim Gbf"
+# hbf = name + str e.g. "Hildesheim Hbf"
+# pbf = name + str e.g. ""
+# selbstblöcke = str int e.g. "SBK 18"
+# abzweige = str + str + (str) e.g. "Abzw Berliner Straße" oder "Abzw Heide". 3. str kann / muss nicht
+# haltepunkt = komplexer oder einfacher name + str e.g. "Bad St Peter-Ording Hp"
+# bft = str + komplexer name e.g. "Bft Au-Hirblinger Straße"
+# bk = str + name e.g. "Bk Buchberg"
+# überleitstelle = str + name e.g. "Üst Veerßen"
 
 
 class Entry:
@@ -316,6 +331,8 @@ class Service:
         self._validateEntryIsInStation(entry=self._end, index=1)
 
     def _validateEntryIsInStation(self, entry: EntryTimetable, index: int) -> None:
+        # TODO: differentiate between passenger and cargo services
+
         if self._zuglauf is None:
             return
 
@@ -324,7 +341,8 @@ class Service:
         if len(split) < 2:
             return
 
-        name: str = split[index].strip()
+        # removes "prefixes" such as "S 68" from "S 68 Düsseldorf Hbf"
+        name: str = re.sub(r"^[A-Za-z]+\s?\d*\s", "", split[index]).strip()
 
         entry.isPlannedStop = entry.name.strip() == name
 
