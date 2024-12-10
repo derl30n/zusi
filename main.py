@@ -277,7 +277,16 @@ class Service:
                 if not hasMatchingName:
                     continue
 
-                self._plannedStopps.append(entry_timetable)
+                # Prevent adding the turnaround as planned stopp when we've already added the planned stopp location
+                canAddEntry = not (
+                        len(self._plannedStopps) > 0
+                        and self._plannedStopps[-1].name == entry_timetable.name
+                        and entry_timetable.isTurnAround
+                )
+
+                if canAddEntry:
+                    self._plannedStopps.append(entry_timetable)
+
                 self._turnarounds += entry_timetable.isTurnAround
 
                 break
