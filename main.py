@@ -6,6 +6,7 @@ import xml.etree.ElementTree as Et
 from dataclasses import dataclass, field
 from datetime import datetime
 from tqdm import tqdm
+from enum import Enum
 
 
 # Error Codes
@@ -27,6 +28,14 @@ from tqdm import tqdm
 # bft = str + komplexer name e.g. "Bft Au-Hirblinger Straße"
 # bk = str + name e.g. "Bk Buchberg"
 # überleitstelle = str + name e.g. "Üst Veerßen"
+
+
+class Flags(Enum):
+    INVALID = -1
+    OFFENE_STRECKE = 0
+    BETRIEBSSTELLE = 1
+    GBF = 2
+    PBF = 3
 
 
 class Entry:
@@ -76,11 +85,13 @@ class EntryPlaceholder(Entry):
 class EntryTimetable(Entry):
     __slots__ = (
         'isTurnAround',
-        'runningDistance'
+        'runningDistance',
+        'flags'
     )
 
     isTurnAround: bool
     runningDistance: int
+    flags: list[Flags]
 
     def __init__(self, rawEntry):
         dist = rawEntry.get('FplLaufweg')
@@ -97,12 +108,40 @@ class EntryTimetable(Entry):
 
         super().__init__(name=nameStr, timeArr=arrStr, timeDep=depStr)
 
+        self._setFlags()
+
     def override(self, other: Entry) -> None:
         self.name = other.name
         self.timeArr = other.timeArr
         self.timeDep = other.timeDep
         self.isValid = True
         self.isPlannedStop = False
+
+        # TODO: do we need to re-set flags in this case??
+        self.flags = []
+        self._setFlags()
+
+    # TODO: may move to parent class
+    def _setFlags(self) -> None:
+        # Typically only one kind of flag should be settable / condition True
+
+        if self._nameContains(["GSMR"]):
+            self.flags.append(Flags.INVALID)
+
+        if self._nameContains(["SBK", "BK", "ESIG", "ZSIG", "ASIG", "ABZW", "ÜST", "VSIG"]):
+            self.flags.append(Flags.OFFENE_STRECKE)
+
+        if self._nameContains(["BFT"]):
+            self.flags.append(Flags.BETRIEBSSTELLE)
+
+        if self._nameContains(["HP", "PBF", "HBF"]):
+            self.flags.append(Flags.PBF)
+
+        if self._nameContains(["GBF", "RBF"]):
+            self.flags.append(Flags.GBF)
+
+    def _nameContains(self, flags: list[str]) -> bool:
+        return any(keyword.lower() in self.name.lower() for keyword in flags)
 
 
 class EntryTrn(Entry):
@@ -341,6 +380,7 @@ class Service:
 
     def _validateEntryIsInStation(self, entry: EntryTimetable, index: int) -> None:
         # TODO: differentiate between passenger and cargo services
+        # TODO: implement flag system, adds diversity and support for cargo/passenger type differentiation
 
         if self._zuglauf is None:
             return
