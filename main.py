@@ -45,7 +45,8 @@ class Entry:
         'timeDep',
         'isPlannedStop',
         'isValid',
-        'hasArrivalTime'
+        'hasArrivalTime',
+        'flags'
     )
 
     name: str
@@ -54,6 +55,7 @@ class Entry:
     isPlannedStop: bool
     isValid: bool
     hasArrivalTime: bool
+    flags: list[Flags]
 
     def __init__(self, name: str, timeArr: datetime | None, timeDep: datetime | None):
         self.name = name
@@ -63,8 +65,36 @@ class Entry:
         self.isValid = all([name, timeDep])
         self.hasArrivalTime = timeArr is not None
 
+        self.flags = []
+        self._setFlags()
+
     def __cmp__(self, other) -> bool:
         return self.name == other.name
+
+    def _setFlags(self) -> None:
+        if self.name is None:
+            self.flags = [Flags.INVALID]
+            return
+
+        # Typically only one kind of flag should be settable / condition True
+
+        if self._nameContains(["GSMR", "ICON"]):
+            self.flags.append(Flags.INVALID)
+
+        if self._nameContains(["SBK", "BK", "ESIG", "ZSIG", "ASIG", "ABZW", "ÜST", "VSIG"]):
+            self.flags.append(Flags.OFFENE_STRECKE)
+
+        if self._nameContains(["BFT", "BBF"]):
+            self.flags.append(Flags.BETRIEBSSTELLE)
+
+        if self._nameContains(["HP", "PBF", "HBF"]):
+            self.flags.append(Flags.PBF)
+
+        if self._nameContains(["GBF", "RBF"]):
+            self.flags.append(Flags.GBF)
+
+    def _nameContains(self, flags: list[str]) -> bool:
+        return any(keyword.lower() in self.name.lower() for keyword in flags)
 
     @staticmethod
     def getTime(timeString: str | None) -> datetime | None:
@@ -85,13 +115,11 @@ class EntryPlaceholder(Entry):
 class EntryTimetable(Entry):
     __slots__ = (
         'isTurnAround',
-        'runningDistance',
-        'flags'
+        'runningDistance'
     )
 
     isTurnAround: bool
     runningDistance: int
-    flags: list[Flags]
 
     def __init__(self, rawEntry):
         dist = rawEntry.get('FplLaufweg')
@@ -108,8 +136,6 @@ class EntryTimetable(Entry):
 
         super().__init__(name=nameStr, timeArr=arrStr, timeDep=depStr)
 
-        self._setFlags()
-
     def override(self, other: Entry) -> None:
         self.name = other.name
         self.timeArr = other.timeArr
@@ -121,39 +147,22 @@ class EntryTimetable(Entry):
         self.flags = []
         self._setFlags()
 
-    # TODO: may move to parent class
-    def _setFlags(self) -> None:
-        # Typically only one kind of flag should be settable / condition True
-
-        if self._nameContains(["GSMR"]):
-            self.flags.append(Flags.INVALID)
-
-        if self._nameContains(["SBK", "BK", "ESIG", "ZSIG", "ASIG", "ABZW", "ÜST", "VSIG"]):
-            self.flags.append(Flags.OFFENE_STRECKE)
-
-        if self._nameContains(["BFT"]):
-            self.flags.append(Flags.BETRIEBSSTELLE)
-
-        if self._nameContains(["HP", "PBF", "HBF"]):
-            self.flags.append(Flags.PBF)
-
-        if self._nameContains(["GBF", "RBF"]):
-            self.flags.append(Flags.GBF)
-
-    def _nameContains(self, flags: list[str]) -> bool:
-        return any(keyword.lower() in self.name.lower() for keyword in flags)
-
 
 class EntryTrn(Entry):
-    __slots__ = 'hasEvent'
+    __slots__ = (
+        'hasEvent',
+        'isTurnAround'
+    )
 
     hasEvent: bool
+    isTurnAround: bool
 
     def __init__(self, rawEntry):
         name = rawEntry.get('Betrst')
         arr = self.getTime(rawEntry.get('Ank'))
         dep = self.getTime(rawEntry.get('Abf'))
 
+        self.isTurnAround = rawEntry.get('FzgVerbandAktion') == "2"
         self.hasEvent = len(rawEntry.findall('Ereignis')) > 0
 
         super().__init__(name=name, timeArr=arr, timeDep=dep)
@@ -173,6 +182,7 @@ class Service:
         '_laenge',
         '_masse',
         '_zuglauf',
+        '_isPassengerTrain',
         '_country',
         '_route',
         '_fahrplan'
@@ -192,6 +202,7 @@ class Service:
     _laenge: int
     _masse: int
     _zuglauf: str
+    _isPassengerTrain: bool
 
     _country: str
     _route: str
@@ -205,14 +216,20 @@ class Service:
         self._turnarounds = 0
         self._hasEvent = False
 
-        timetable_list = schedule.findall('Buchfahrplan')
-        timetable_rows = [entry for row in timetable_list for entry in row.findall("FplZeile")]
+        self._isPassengerTrain = bool(trn.get("Zugtyp"))
+
         trn_rows = trn.findall('FahrplanEintrag')
 
-        if len(timetable_rows) < 2 or len(trn_rows) < 2:
+        # don't process super short services, not worth it
+        if len(trn_rows) < 2:
             # print(99, trn.findall('BuchfahrplanRohDatei')[0].get('Dateiname'))
             return
 
+        # if len(timetable_rows) < 2 or len(trn_rows) < 2:
+        #     # print(99, trn.findall('BuchfahrplanRohDatei')[0].get('Dateiname'))
+        #     return
+
+        timetable_list = schedule.findall('Buchfahrplan')
         initial_timetable = timetable_list[0]
         self._gattung = initial_timetable.get('Gattung')
         self._zugnr = initial_timetable.get('Nummer')
@@ -232,7 +249,48 @@ class Service:
         self._route = trackSplit[-1]
         self._fahrplan = serviceSplit[-2]
 
-        self._findStart(timetable_rows, trn_rows)
+        self._constructRoute(trn_rows, timetable_list)
+
+        # self._findStart(timetable_rows, trn_rows)
+
+    def _constructRoute(self, trn_rows: list, timetable_list: list) -> None:
+
+        # trn file holds all necessary information, except for running distance
+        route: list[EntryTrn] = self._getRouteFromTrn(trn_rows)
+
+        # don't add a service that has no valid start and end points
+        if len(route) < 2:
+            return
+
+        start: EntryTrn = route.pop(0)
+        end: EntryTrn = route.pop(-1)
+        stops: list[EntryTrn] = [entry for entry in route if entry.isPlannedStop]
+        # TODO: do we need to check for duplicates like previously?
+
+
+        # TODO: get the missing information from timetable.xml, since only running distance is missing,
+        #  I suggest only fetch information for end point, one might want to use a reversed for loop
+
+        # do some stuff
+
+        # TODO: before validate, we need to make use of our flags ;)
+        timetable_rows: list = [entry for row in timetable_list for entry in row.findall("FplZeile")]
+
+        self._validate()
+
+    @staticmethod
+    # returns a list of all valid EntryTrn
+    def _getRouteFromTrn(trn_rows: list) -> list[EntryTrn]:
+        res: list[EntryTrn] = []
+
+        for row in trn_rows:
+            entry_trn = EntryTrn(row)
+
+            # invalid entries are ignored since they hold no valuable information
+            if not entry_trn.isValid:
+                continue
+
+        return res
 
     def _findStart(self, timetable_rows: list, trn_rows: list) -> None:
         start_trn = EntryTrn(trn_rows[0])
