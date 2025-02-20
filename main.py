@@ -66,19 +66,11 @@ class Entry:
         self.hasArrivalTime = timeArr is not None
 
         self.flag = Flags.INVALID
-        self._setFlag()
 
-    def __cmp__(self, other) -> bool:
-        return self.name == other.name
-
-    def _setFlag(self) -> None:
         if self.name is None:
             return
 
-        # Typically only one kind of flag should be settable / condition True
-
-        # if self._nameContains(["GSMR", "ICON"]):
-        #     self.flags.append(Flags.INVALID)
+        # TODO: figure out how to add flag PBF to stations that do not use any key words
 
         if self._nameContains(["SBK", "BK", "ESIG", "ZSIG", "ASIG", "ABZW", "ÜST", "VSIG"]):
             self.flag = Flags.OFFENE_STRECKE
@@ -115,50 +107,16 @@ class EntryPlaceholder(Entry):
         super().__init__(name="", timeArr=None, timeDep=None)
 
 
-class EntryTimetable(Entry):
-    __slots__ = (
-        'isTurnAround',
-        'runningDistance'
-    )
-
-    isTurnAround: bool
-    runningDistance: int
-
-    def __init__(self, rawEntry):
-        dist = rawEntry.get('FplLaufweg')
-        name = rawEntry.findall('FplName')
-        arr = rawEntry.findall('FplAnk')
-        dep = rawEntry.findall('FplAbf')
-
-        self.isTurnAround = rawEntry.find('FplRichtungswechsel') is not None
-        self.runningDistance = int(float(dist)) if dist is not None else 0
-
-        nameStr = name[0].get('FplNameText') if len(name) > 0 else None
-        arrStr = self.getTime(arr[0].get('Ank')) if len(arr) > 0 else None
-        depStr = self.getTime(dep[0].get('Abf')) if len(dep) > 0 else arrStr
-
-        super().__init__(name=nameStr, timeArr=arrStr, timeDep=depStr)
-
-    def override(self, other: Entry) -> None:
-        self.name = other.name
-        self.timeArr = other.timeArr
-        self.timeDep = other.timeDep
-        self.isValid = True
-        self.isPlannedStop = False
-
-        # TODO: do we need to re-set flags in this case??
-        self.flags = []
-        self._setFlags()
-
-
 class EntryTrn(Entry):
     __slots__ = (
         'hasEvent',
-        'isTurnAround'
+        'isTurnAround',
+        "runningDistance"
     )
 
     hasEvent: bool
     isTurnAround: bool
+    runningDistance: int
 
     def __init__(self, rawEntry):
         name = rawEntry.get('Betrst')
@@ -167,6 +125,7 @@ class EntryTrn(Entry):
 
         self.isTurnAround = rawEntry.get('FzgVerbandAktion') == "2"
         self.hasEvent = len(rawEntry.findall('Ereignis')) > 0
+        self.runningDistance = -1
 
         super().__init__(name=name, timeArr=arr, timeDep=dep)
 
@@ -194,7 +153,7 @@ class Service:
     isValid: bool
 
     _start: EntryTrn | EntryPlaceholder
-    _end: EntryTimetable | EntryPlaceholder
+    _end: EntryTrn | EntryPlaceholder
     _plannedStopps: list[EntryTrn]
     _turnarounds: int
     _hasEvent: bool
@@ -254,68 +213,38 @@ class Service:
 
         self._constructRoute(trn_rows, timetable_list)
 
-    def _setEndFromEndPoint(self, end_trn: EntryTrn, timetable_list: list) -> None:
-        # TODO: perhaps refactor, to only fetch the running distance and store it on the trn entry
-        timetable_rows: list = [entry for row in timetable_list for entry in row.findall("FplZeile")]
-        timetable_rows.reverse()
-
-        for row in timetable_rows:
-            # TODO: perhaps this might be possible to not create so many objects
-            # if not end_trn.name == row.findall('FplName'):
-            #     continue
-            #
-            # dist = row.get('FplLaufweg')
-            # runningDistance = int(float(dist)) if dist is not None else 0
-            # end_trn.setRunningDistance(runningDistance)
-            #
-            # return
-            # <<- end.trn.isValid = False
-
-            entry_timetable = EntryTimetable(row)
-
-            # print(end_trn.name, entry_timetable.name, end_trn.name == entry_timetable.name)
-
-            if not end_trn.name == entry_timetable.name:
-                continue
-
-            self._end = entry_timetable
-            break
-
     def _constructRoute(self, trn_rows: list, timetable_list: list) -> None:
         # trn file holds all necessary information, except for running distance
         route: list[EntryTrn] = self._getValidEntryTrnAsList(trn_rows)
 
         # don't add a service that has no valid start and end points
         if len(route) < 2:
-            print("_constructRoute: route<2")
             return
 
         self._start: EntryTrn = route.pop(0)
-        end: EntryTrn = route.pop(-1)
+        self._end: EntryTrn = route[-1]
         self._plannedStopps = [entry for entry in route if entry.isPlannedStop]
 
-        self._setEndFromEndPoint(end, timetable_list)
+        self._setRunningDistanceFromTimeTable(timetable_list)
 
-        # there might be a change that we do not find the entry from trn in the timetable
-        if not self._end.isValid:
-            # print(self._fahrplan, self._gattung, self._zugnr, self._end.name, end.name, self._end.flag, "\n", ", ".join(stopp.name for stopp in route))
-            print(f"{self._fahrplan}, {self._gattung}, {self._zugnr}, [{self._end.name}], [{end.name}], {self._end.flag}")
-
-            print("something went wrong finding the pair")
+        # there might be a chance that we do not find the entry from trn in the timetable
+        if not self._end.isValid or self._end.runningDistance == -1:
             return
 
-        # TODO: do we need to check for duplicates like previously?
+        # TODO: do we need to check for duplicates like previously? ANSWER, no we dont!
 
         self._changeFlagOnDeviatingNames()
 
         self.isValid = self._start.isValid and self._end.isValid
 
-    @staticmethod
-    def _getValidEntryTrnAsList(trn_rows: list) -> list[EntryTrn]:
+    def _getValidEntryTrnAsList(self, trn_rows: list) -> list[EntryTrn]:
         res: list[EntryTrn] = []
 
         for row in trn_rows:
             entry_trn = EntryTrn(row)
+
+            self._hasEvent = self._hasEvent or entry_trn.hasEvent
+            self._turnarounds += entry_trn.isTurnAround
 
             # invalid entries are ignored since they hold no valuable information
             if not entry_trn.isValid:
@@ -324,6 +253,13 @@ class Service:
             res.append(entry_trn)
 
         return res
+
+    def _setRunningDistanceFromTimeTable(self, timetable_list: list) -> None:
+        last_timetable_row = [entry for row in timetable_list for entry in row.findall("FplZeile")][-1]
+
+        dist = last_timetable_row.get('FplLaufweg')
+
+        self._end.runningDistance = int(float(dist)) if dist is not None else 0
 
     def _changeFlagOnDeviatingNames(self) -> None:
         # we are trying to use a naming scheme on zusi services,
@@ -352,6 +288,7 @@ class Service:
         dv = 0 if duration.seconds == 0 else int((self._end.runningDistance / duration.seconds) * 3.6)
 
         return {
+            "art": "P" if self._isPassengerTrain else "C",
             "gattung": self._gattung,
             "zugnr": self._zugnr,
             "begin": datetime.strftime(self._start.timeDep, "%H:%M"),
