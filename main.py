@@ -225,6 +225,9 @@ class Service:
         self._end: EntryTrn = route[-1]
         self._plannedStopps = [entry for entry in route if entry.isPlannedStop]
 
+        startFlag = self._start.flag.name
+        endFlag = self._end.flag.name
+
         self._setRunningDistanceFromTimeTable(timetable_list)
 
         # there might be a chance that we do not find the entry from trn in the timetable
@@ -233,7 +236,13 @@ class Service:
 
         # TODO: do we need to check for duplicates like previously? ANSWER, no we dont!
 
-        self._changeFlagOnDeviatingNames()
+        print(self._plannedStopps[0].name, self._plannedStopps[0].name == self._start.name)
+
+        # TODO: fix _changeFlagOnDeviatingNames -> see function for further info
+        # self._changeFlagOnDeviatingNames()
+
+        print(f"{self._start.name}: [{startFlag}] -> [{self._start.flag.name}]")
+        print(f"{self._end.name}: [{endFlag}] -> [{self._end.flag.name}]")
 
         self.isValid = self._start.isValid and self._end.isValid
 
@@ -262,6 +271,16 @@ class Service:
         self._end.runningDistance = int(float(dist)) if dist is not None else 0
 
     def _changeFlagOnDeviatingNames(self) -> None:
+        # TODO: fix getFilteredText, issue at hand: "Kassel Hbf" becomes "Hbf", which is wrong
+        #  Task: find a working solution that works with all listed examples below:
+        #   Kassel Hbf - Hamburg-Altona
+        #   Übach Pallenberg - Herzogenrath -. Kohlscheid - Aachen West - Aachen Hbf
+        #   Zürich HB - Kiel Hbf
+        #   Zürich HB - Hamburg-Altona
+        #   IC 51 Kassel-Wilhelmshöhe - Gera Hbf
+        #   RB64 Husum - Bad St. Peter-Ording
+        #   S 20 Hannover Hbf - Celle
+
         # we are trying to use a naming scheme on zusi services,
         # where services that do not star/terminate at the actual locations have fictional names, hence not match actual position
 
