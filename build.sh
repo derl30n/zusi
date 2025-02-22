@@ -4,6 +4,7 @@ cd "./build" || exit
 
 cp "../main.py" "./"
 cp "../config.json" "./dist"
+cp "../stations.json" "./dist"
 cp "../README.MD" "./dist"
 
 python -m venv zusi
@@ -19,6 +20,7 @@ mkdir -p -- "./deploy"
 
 cp "./build/dist/main.exe" "./deploy/"
 cp "./build/dist/config.json" "./deploy/"
+cp "./build/dist/stations.json" "./deploy/"
 cp "./build/dist/README.MD" "./deploy/"
 
 rm -rf "./build"
