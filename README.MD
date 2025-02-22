@@ -64,7 +64,8 @@ To explore the database file, use a database viewer like [sqlite](https://sqlite
 
 Click on the "Browse Data" tab to filter and sort through all drivable jobs in Zusi.
 
-![Browse Data](https://i.imgur.com/RN1d3Kv.png)
+![Browse Data](https://i.imgur.com/458IQnL.png)
+![Browse Data](https://imgur.com/DFz2wSZ)
 
 ---
 
@@ -73,7 +74,7 @@ Click on the "Browse Data" tab to filter and sort through all drivable jobs in Z
 Route: Hamburg - Kassel  
 Loco: BR 412 (ICE 4)
 
-![Example Route](https://i.imgur.com/ph5xlK6.png)
+![Example Route](https://i.imgur.com/7VQ8dg1.png)
 ![Example Loco](https://i.imgur.com/RXm0UjN.png)
 ![Service Details](https://i.imgur.com/kXYdglS.png)
 
