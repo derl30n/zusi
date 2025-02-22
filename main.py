@@ -270,8 +270,12 @@ class Service:
 
         # 3 - kein planmäßiger stopp, jedoch starten wir im PBF oder GBF
         if closestPoint is not None and closestPoint.runningDistance < 800:
-            self._start.flag = closestPoint.flag
-            return
+            if zuglauf_start in closestPoint.name:
+                self._start.flag = closestPoint.flag
+                return
+
+            if closestPoint.name == self._start.name:
+                return
 
         self._start.flag = Flags.OFFENE_STRECKE
 
