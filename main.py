@@ -246,10 +246,11 @@ class Service:
 
         self._constructRoute(entryTimetableList, trn_rows, link)
 
-    def _setStartTag(self, timetableStart: EntryTimetable) -> None:
+    def _setStartTag(self, timetableStart: EntryTimetable, closestPoint: EntryTimetable) -> None:
         # Annahme:
         # 1. zuglauf start == trn start -> gegebenes trn start Flag
         # 2. entry timetable (mit arr und dep) < 800m FplLaufweg -> gegebenes timetable entry Flag
+        # 3. nahegelegender entry timetable (mit PBF, GBF Flag) < 800m FplLaufweg -> gegebenes timetable entry Flag
         # sonst immer Flags.OFFENE_STRECKE
 
         zuglauf_start = self._zuglauf.split(" - ")[0]
@@ -258,9 +259,14 @@ class Service:
         if zuglauf_start in self._start.name:
             return
 
-        # 2.1
+        # 2
         if timetableStart is not None and timetableStart.runningDistance < 800:
             self._start.flag = timetableStart.flag
+            return
+
+        # 3 - kein planmäßiger stopp, jedoch starten wir im PBF oder GBF
+        if closestPoint is not None and closestPoint.runningDistance < 800:
+            self._start.flag = closestPoint.flag
             return
 
         self._start.flag = Flags.OFFENE_STRECKE
@@ -269,7 +275,10 @@ class Service:
         entryTimetableListDepArrTimes: list[EntryTimetable] = [entry for entry in entryTimetableList if all([entry.timeArr, entry.timeDep])]
 
         self._start = EntryTrn(trn_rows[0])
-        self._setStartTag(entryTimetableListDepArrTimes[0] if entryTimetableListDepArrTimes else None)
+        self._setStartTag(
+            entryTimetableListDepArrTimes[0] if entryTimetableListDepArrTimes else None,
+            next((entry for entry in entryTimetableList if any([entry.flag.PBF, entry.flag.GBF])), None)
+        )
 
         self._plannedStopps = self._filter_consecutive_duplicates(entryTimetableListDepArrTimes)
         self._end = next((entry for entry in reversed(entryTimetableList) if entry.timeDep is not None), None)
@@ -287,7 +296,8 @@ class Service:
         last_name = None
 
         for entry in entryTimetableListDepArrTimes:
-            if entry.name is None:
+            # we don't need to check for names since all PBF and GBF have names
+            if entry.flag not in [Flags.PBF, Flags.GBF]:
                 continue
 
             if last_name == entry.name:
@@ -318,7 +328,7 @@ class Service:
         return res
 
     def getAsDict(self) -> dict:
-        duration = self._end.timeDep - self._start.timeArr
+        duration = (self._end.timeArr or self._end.timeDep) - self._start.timeDep
         dv = 0 if duration.seconds == 0 else int((self._end.runningDistance / duration.seconds) * 3.6)
 
         return {
