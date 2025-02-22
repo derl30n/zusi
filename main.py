@@ -98,7 +98,7 @@ class Entry:
             self.flag = Flags.OFFENE_STRECKE
             return
 
-        if self._nameContains(["BBF"]):
+        if self._nameContains(["BBF", "ÜST"]):
             self.flag = Flags.BETRIEBSSTELLE
             return
 
