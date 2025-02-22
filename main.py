@@ -98,11 +98,11 @@ class Entry:
             self.flag = Flags.OFFENE_STRECKE
             return
 
-        if self._nameContains(["BFT", "BBF"]):
+        if self._nameContains(["BBF"]):
             self.flag = Flags.BETRIEBSSTELLE
             return
 
-        if self._nameContains(["HP", "PBF", "HBF", "BF", "HST"]):
+        if self._nameContains(["HP", "PBF", "HBF", "BF", "HST", "BFT"]):
             self.flag = Flags.PBF
             return
 
