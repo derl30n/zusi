@@ -65,7 +65,7 @@ To explore the database file, use a database viewer like [sqlite](https://sqlite
 Click on the "Browse Data" tab to filter and sort through all drivable jobs in Zusi.
 
 ![Browse Data](https://i.imgur.com/458IQnL.png)
-![Browse Data](https://imgur.com/DFz2wSZ)
+![Browse Data](https://imgur.com/DFz2wSZ.png)
 
 ---
 
