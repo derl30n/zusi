@@ -6,14 +6,7 @@ import xml.etree.ElementTree as Et
 from dataclasses import dataclass, field
 from datetime import datetime
 from tqdm import tqdm
-
-
-# Error Codes
-# 99 -> less than two entries in trn | at least two are required for a valid schedule
-#  1 -> failed health check (invalid trn start or end)
-#  0 -> no valid start/entry found in timetable
-#  2 -> no remaining timetable entries after start has been defined
-
+from enum import Enum
 
 # Formate:
 # einfacher name = durchgehender string e.g. "Salzkotten"
@@ -29,33 +22,101 @@ from tqdm import tqdm
 # überleitstelle = str + name e.g. "Üst Veerßen"
 
 
+class Flags(Enum):
+    INVALID = -2
+    TIMETABLE_INFO = -1
+    UNKNOWN = 0
+    OFFENE_STRECKE = 1
+    BETRIEBSSTELLE = 2
+    GBF = 3
+    PBF = 4
+
+
 class Entry:
     __slots__ = (
         'name',
         'timeArr',
         'timeDep',
-        'isPlannedStop',
-        'isValid',
-        'hasArrivalTime'
+        'flag',
+        'hasEvent',
+        'isTurnAround',
+        'runningDistance',
+        'isEbulaInfo'
     )
 
     name: str
     timeArr: datetime | None
     timeDep: datetime | None
-    isPlannedStop: bool
-    isValid: bool
-    hasArrivalTime: bool
+    isTurnAround: bool
+    runningDistance: int
+    hasEvent: bool
+    flag: Flags
+    isEbulaInfo: bool
 
-    def __init__(self, name: str, timeArr: datetime | None, timeDep: datetime | None):
+    def __init__(
+            self,
+            name: str,
+            timeArr: datetime | None,
+            timeDep: datetime | None,
+            isTurnAround: bool = False,
+            runningDistance: int = 0,
+            isEbulaInfo: bool = False
+    ):
         self.name = name
         self.timeArr = timeArr
         self.timeDep = timeDep
-        self.isPlannedStop = all([name, timeArr, timeDep])
-        self.isValid = all([name, timeDep])
-        self.hasArrivalTime = timeArr is not None
+        self.isTurnAround = isTurnAround
+        self.runningDistance = runningDistance
+        self.isEbulaInfo = isEbulaInfo
 
-    def __cmp__(self, other) -> bool:
-        return self.name == other.name
+        # we do this so that we can always read timeDep, no influence on functionality
+        if all([name, timeArr]) and self.timeDep is None:
+            self.timeDep = timeArr
+
+        self.flag = Flags.INVALID
+
+        if self.isEbulaInfo:
+            self.flag = Flags.TIMETABLE_INFO
+            return
+
+        if self.name is None:
+            if self.timeArr and self.timeDep:
+                self.flag = Flags.OFFENE_STRECKE
+
+            return
+
+        if self._matchesEbulaInfoPattern():
+            self.flag = Flags.TIMETABLE_INFO
+            return
+
+        flag: Flags = stations.get(self.name.lower())
+        if flag is not None:
+            self.flag = flag
+            return
+
+        if self._nameContains(["SBK", "BK", "ESIG", "ZSIG", "ASIG", "ABZW", "ÜST", "VSIG"]):
+            self.flag = Flags.OFFENE_STRECKE
+            return
+
+        if self._nameContains(["BFT", "BBF"]):
+            self.flag = Flags.BETRIEBSSTELLE
+            return
+
+        if self._nameContains(["HP", "PBF", "HBF", "BF", "HST"]):
+            self.flag = Flags.PBF
+            return
+
+        if self._nameContains(["GBF", "RBF"]):
+            self.flag = Flags.GBF
+            return
+
+        self.flag = Flags.UNKNOWN
+
+    def _matchesEbulaInfoPattern(self) -> bool:
+        return bool(re.match(r"^-\s.*\s-$", self.name.lower()))
+
+    def _nameContains(self, keyword_list: list[str]) -> bool:
+        return any(keyword.lower() in self.name.lower().split(" ") for keyword in keyword_list)
 
     @staticmethod
     def getTime(timeString: str | None) -> datetime | None:
@@ -74,48 +135,27 @@ class EntryPlaceholder(Entry):
 
 
 class EntryTimetable(Entry):
-    __slots__ = (
-        'isTurnAround',
-        'runningDistance'
-    )
-
-    isTurnAround: bool
-    runningDistance: int
-
     def __init__(self, rawEntry):
         dist = rawEntry.get('FplLaufweg')
         name = rawEntry.findall('FplName')
         arr = rawEntry.findall('FplAnk')
         dep = rawEntry.findall('FplAbf')
-
-        self.isTurnAround = rawEntry.find('FplRichtungswechsel') is not None
-        self.runningDistance = int(float(dist)) if dist is not None else 0
+        isEbulaInfo = len(rawEntry.findall('FplIcon')) > 0
 
         nameStr = name[0].get('FplNameText') if len(name) > 0 else None
         arrStr = self.getTime(arr[0].get('Ank')) if len(arr) > 0 else None
-        depStr = self.getTime(dep[0].get('Abf')) if len(dep) > 0 else arrStr
+        depStr = self.getTime(dep[0].get('Abf')) if len(dep) > 0 else None
+        isTurnAround = rawEntry.find('FplRichtungswechsel') is not None
+        runningDistance = int(float(dist)) if dist is not None else 0
 
-        super().__init__(name=nameStr, timeArr=arrStr, timeDep=depStr)
-
-    def override(self, other: Entry) -> None:
-        self.name = other.name
-        self.timeArr = other.timeArr
-        self.timeDep = other.timeDep
-        self.isValid = True
-        self.isPlannedStop = False
+        super().__init__(name=nameStr, timeArr=arrStr, timeDep=depStr, isTurnAround=isTurnAround, runningDistance=runningDistance, isEbulaInfo=isEbulaInfo)
 
 
 class EntryTrn(Entry):
-    __slots__ = 'hasEvent'
-
-    hasEvent: bool
-
     def __init__(self, rawEntry):
         name = rawEntry.get('Betrst')
         arr = self.getTime(rawEntry.get('Ank'))
         dep = self.getTime(rawEntry.get('Abf'))
-
-        self.hasEvent = len(rawEntry.findall('Ereignis')) > 0
 
         super().__init__(name=name, timeArr=arr, timeDep=dep)
 
@@ -134,6 +174,7 @@ class Service:
         '_laenge',
         '_masse',
         '_zuglauf',
+        '_isPassengerTrain',
         '_country',
         '_route',
         '_fahrplan'
@@ -141,7 +182,7 @@ class Service:
 
     isValid: bool
 
-    _start: EntryTimetable | EntryPlaceholder
+    _start: EntryTrn | EntryPlaceholder
     _end: EntryTimetable | EntryPlaceholder
     _plannedStopps: list[EntryTimetable]
     _turnarounds: int
@@ -153,6 +194,7 @@ class Service:
     _laenge: int
     _masse: int
     _zuglauf: str
+    _isPassengerTrain: bool
 
     _country: str
     _route: str
@@ -166,12 +208,18 @@ class Service:
         self._turnarounds = 0
         self._hasEvent = False
 
+        self._isPassengerTrain = bool(trn.get("Zugtyp"))
+        self._zuglauf = trn.get("Zuglauf")
+
+        if self._zuglauf is None:
+            return
+
+        trn_rows = trn.findall('FahrplanEintrag')
         timetable_list = schedule.findall('Buchfahrplan')
         timetable_rows = [entry for row in timetable_list for entry in row.findall("FplZeile")]
-        trn_rows = trn.findall('FahrplanEintrag')
 
-        if len(timetable_rows) < 2 or len(trn_rows) < 2:
-            # print(99, trn.findall('BuchfahrplanRohDatei')[0].get('Dateiname'))
+        # don't process super short services, not worth it
+        if len(trn_rows) < 2 or len(timetable_rows) < 2:
             return
 
         initial_timetable = timetable_list[0]
@@ -180,7 +228,6 @@ class Service:
         self._br = initial_timetable.get('BR')
         self._laenge = int(float(initial_timetable.get('Laenge')))
         self._masse = int(int(initial_timetable.get('Masse')) / 1000)
-        self._zuglauf = initial_timetable.get('Zuglauf')
 
         for timetable in timetable_list[1:]:
             self._zugnr = f"{self._zugnr}_{timetable.get('Nummer')}"
@@ -193,176 +240,112 @@ class Service:
         self._route = trackSplit[-1]
         self._fahrplan = serviceSplit[-2]
 
-        self._findStart(timetable_rows, trn_rows)
+        entryTimetableList: list[EntryTimetable] = self._getEntryTimetableAsList(timetable_rows)
 
-    def _findStart(self, timetable_rows: list, trn_rows: list) -> None:
-        start_trn = EntryTrn(trn_rows[0])
-        end_trn = EntryTrn(trn_rows[-1])
+        link = service.replace(" ", "%20").replace("\\", "/")
 
-        if not start_trn.isValid or not end_trn.isValid:
-            # print(1, start_trn.name, start_trn.timeDep)
+        # don't add a service that has no valid start and end points
+        if len(entryTimetableList) < 2:
             return
 
-        # On rare occasions timeArr is not defined on first entry in trn
-        if not start_trn.hasArrivalTime:
-            start_trn.timeArr = start_trn.timeDep
+        self._constructRoute(entryTimetableList, trn_rows, link)
 
-        running_index_timetable: int = -1
-        for i, row in enumerate(timetable_rows):
-            entry = EntryTimetable(row)
+    def _setStartTag(self, timetableStart: EntryTimetable, closestPoint: EntryTimetable) -> None:
+        # Annahme:
+        # 1. zuglauf start == trn start -> gegebenes trn start Flag
+        # 2. entry timetable (mit arr und dep) < 800m FplLaufweg -> gegebenes timetable entry Flag
+        # 3. nahegelegender entry timetable (mit PBF, GBF Flag) < 800m FplLaufweg -> gegebenes timetable entry Flag
+        # sonst immer Flags.OFFENE_STRECKE
 
-            if not entry.isValid:
+        zuglauf_start = self._zuglauf.split(" - ")[0]
+
+        # 1.
+        if zuglauf_start in self._start.name:
+            return
+
+        # 2
+        if timetableStart is not None and timetableStart.runningDistance < 800:
+            self._start.flag = timetableStart.flag
+            return
+
+        # 3 - kein planmäßiger stopp, jedoch starten wir im PBF oder GBF
+        if closestPoint is not None and closestPoint.runningDistance < 800:
+            # naher punkt hat selben namen wie zuglauf
+            if zuglauf_start in closestPoint.name:
+                self._start.flag = closestPoint.flag
+                return
+
+            # naher punkter hat selben namen wie start trn
+            if closestPoint.name == self._start.name:
+                return
+
+        self._start.flag = Flags.OFFENE_STRECKE
+
+    def _constructRoute(self, entryTimetableList: list[EntryTimetable], trn_rows: list, link: str) -> None:
+        entryTimetableListDepArrTimes: list[EntryTimetable] = [entry for entry in entryTimetableList if all([entry.timeArr, entry.timeDep])]
+
+        self._start = EntryTrn(trn_rows[0])
+        self._setStartTag(
+            entryTimetableListDepArrTimes[0] if entryTimetableListDepArrTimes else None,
+            next((entry for entry in entryTimetableList if any([entry.flag.PBF, entry.flag.GBF])), None)
+        )
+
+        self._plannedStopps = self._filter_consecutive_duplicates(entryTimetableListDepArrTimes)
+        self._end = next((entry for entry in reversed(entryTimetableList) if entry.timeDep is not None), None)
+
+        if self._end is None:
+            return
+
+        self._hasEvent = any(len(row.findall('Ereignis')) > 0 for row in trn_rows)
+
+        self.isValid = all([self._start.timeArr, self._end.timeDep])
+
+    @staticmethod
+    def _filter_consecutive_duplicates(entryTimetableListDepArrTimes: list[EntryTimetable]) -> list[EntryTimetable]:
+        filtered_stops = []
+        last_name = None
+
+        for entry in entryTimetableListDepArrTimes:
+            # we don't need to check for names since all PBF and GBF have names
+            if entry.flag not in [Flags.PBF, Flags.GBF]:
                 continue
 
-            self._start = entry
-            running_index_timetable = i + 1
-
-            break
-
-        if not self._start.isValid:
-            # print(0)
-            return
-
-        if not self._start.name == start_trn.name:
-            self._start.override(start_trn)
-            running_index_timetable = 0
-
-        self._validateStartIsInStation()
-
-        # exclude already "checked" rows -> only pass unchecked rows
-        remaining_timetable_rows = timetable_rows[running_index_timetable:]
-
-        if len(remaining_timetable_rows) == 0:
-            # print(2)
-            return
-
-        self._findPlannedStopps(remaining_timetable_rows, trn_rows[1:])
-
-    def _findPlannedStopps(self, timetable_rows: list, trn_rows: list) -> None:
-        trn_current_index: int = -1
-        last_valid_index: int = 0
-
-        for entry in trn_rows:
-            trn_current_index += 1
-            entry_trn: EntryTrn = EntryTrn(entry)
-
-            if not entry_trn.isValid:
+            if last_name == entry.name:
                 continue
 
-            index: int = 0
-
-            for i, entry_tt in enumerate(timetable_rows[last_valid_index:]):
-                entry_timetable: EntryTimetable = EntryTimetable(entry_tt)
-
-                # memorize index so we are not checking the same invalid entries over and over
-                if not entry_timetable.isValid:
-                    index = i
-                    continue
-
-                hasMatchingName: bool = entry_timetable.name == entry_trn.name or entry_trn.name in entry_timetable.name
-
-                # prevent the timetable list from "overtaking" the trn list
-                # HOWEVER, !!EXCEPTION!! ignore if it's the name we are looking for -.-
-                if entry_timetable.timeDep > entry_trn.timeDep and not hasMatchingName:
-                    break
-
-                index = i
-
-                if not entry_timetable.isPlannedStop:
-                    if hasMatchingName:
-                        break
-                    continue
-
-                # Ensure the planned stop fitting our time frame has also the correct name
-                if not hasMatchingName:
-                    continue
-
-                # Prevent adding the turnaround as planned stopp when we've already added the planned stopp location
-                canAddEntry = not (
-                        len(self._plannedStopps) > 0
-                        and self._plannedStopps[-1].name == entry_timetable.name
-                        and entry_timetable.isTurnAround
-                )
-
-                if canAddEntry:
-                    self._plannedStopps.append(entry_timetable)
-
-                self._turnarounds += entry_timetable.isTurnAround
-
-                break
-
-            last_valid_index += index + 1
-
-            # if there is an event set, we can no longer check reliably for planned stopps
-            if entry_trn.hasEvent:
-                self._hasEvent = True
-                break
-
-        isLastTrnIndexUsed = len(trn_rows) == trn_current_index + 1
-
-        self._findEnd(timetable_rows, isLastTrnIndexUsed, trn_rows[-1])
-
-    def _findEnd(self, timetable_rows: list, isLastTrnIndexUsed: bool, trn_last) -> None:
-        # is schedule completely populated? -> last entry = end
-        if isLastTrnIndexUsed and len(self._plannedStopps) > 0:
-            self._end = self._plannedStopps[-1]
-            self._validate()
-
-            return
-
-        for row in reversed(timetable_rows[-5:]):
-            entry = EntryTimetable(row)
-
-            if not entry.isValid:
+            # This is 99% our starting point, so do not add
+            if last_name is None and entry.runningDistance < 800:
                 continue
 
-            self._end = entry
-            break
+            filtered_stops.append(entry)
+            last_name = entry.name
 
-        trn_end = EntryTrn(trn_last)
+        return filtered_stops
 
-        if not self._end.isValid or self._end.name != trn_end.name:
-            self._end = EntryTimetable(timetable_rows[-1])
-            self._end.override(trn_end)
+    def _getEntryTimetableAsList(self, timetable_rows: list) -> list[EntryTimetable]:
+        res: list[EntryTimetable] = []
 
-        self._validateEndIsInStation()
+        for row in timetable_rows:
+            entry_timetable = EntryTimetable(row)
 
-        self._validate()
-        return
+            self._turnarounds += entry_timetable.isTurnAround
 
-    def _validate(self) -> None:
-        self.isValid = self._start.isValid and self._end.isValid
+            if entry_timetable.flag == Flags.TIMETABLE_INFO or entry_timetable.flag == Flags.INVALID:
+                continue
 
-    def _validateStartIsInStation(self) -> None:
-        self._validateEntryIsInStation(entry=self._start, index=0)
+            res.append(entry_timetable)
 
-    def _validateEndIsInStation(self) -> None:
-        self._validateEntryIsInStation(entry=self._end, index=1)
-
-    def _validateEntryIsInStation(self, entry: EntryTimetable, index: int) -> None:
-        # TODO: differentiate between passenger and cargo services
-
-        if self._zuglauf is None:
-            return
-
-        split: list[str] = self._zuglauf.split("-")
-
-        if len(split) < 2:
-            return
-
-        # removes "prefixes" such as "S 68" from "S 68 Düsseldorf Hbf"
-        name: str = re.sub(r"^[A-Za-z]+\s?\d*\s", "", split[index]).strip()
-
-        entry.isPlannedStop = entry.name.strip() == name
+        return res
 
     def getAsDict(self) -> dict:
-        duration = self._end.timeDep - self._start.timeDep
+        duration = (self._end.timeArr or self._end.timeDep) - self._start.timeDep
         dv = 0 if duration.seconds == 0 else int((self._end.runningDistance / duration.seconds) * 3.6)
 
         return {
+            "art": "P" if self._isPassengerTrain else "C",
             "gattung": self._gattung,
             "zugnr": self._zugnr,
-            "begin": datetime.strftime(self._start.timeDep, "%H:%M"),
+            "begin": datetime.strftime(self._start.timeArr, "%H:%M"),
             "fahrzeit": str(duration),
             "br": self._br,
             "laenge": self._laenge,
@@ -370,8 +353,8 @@ class Service:
             "nhalte": len(self._plannedStopps),
             "ev": self._hasEvent,
             "w1": self._turnarounds,
-            "v3": self._start.isPlannedStop,
-            "a3": self._end.isPlannedStop,
+            "start": self._start.flag.name,
+            "ende": self._end.flag.name,
             "s_km": int(self._end.runningDistance / 1000),
             "dv": dv,
             "country": self._country,
@@ -394,6 +377,10 @@ class Config:
     paths: list = field(default_factory=list, compare=False)
     datatype: Datatypes = field(default_factory=Datatypes)
     exclusionKeywords: list = field(default_factory=list, compare=False)
+
+
+def getFilteredText(text: str) -> str:
+    return re.sub(r"^[A-Za-z]+\s?\d*\s", "", text).strip()
 
 
 def readFromJsonFile(filename: str, prefix: str = "") -> dict:
@@ -461,6 +448,12 @@ def getDataFromTimetables(timetables: list, config: Config) -> list[dict]:
     return result
 
 
+def loadStationDefinition() -> dict[str, Flags]:
+    station_dict = readFromJsonFile("stations")
+
+    return {key: Flags[value.upper()] for key, value in station_dict.items()}
+
+
 def extrapolateDataFromZusi() -> list[dict]:
     res = readFromJsonFile("config")
 
@@ -498,6 +491,9 @@ def createDatabaseWithData(keys: dict.keys, data: list[tuple]):
         con.commit()
 
     print("Zugdienste in Datenbank eingetragen.")
+
+
+stations: dict[str, Flags] = loadStationDefinition()
 
 
 def main():
