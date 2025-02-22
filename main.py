@@ -89,6 +89,11 @@ class Entry:
             self.flag = Flags.TIMETABLE_INFO
             return
 
+        flag: Flags = stations.get(self.name.lower())
+        if flag is not None:
+            self.flag = flag
+            return
+
         if self._nameContains(["SBK", "BK", "ESIG", "ZSIG", "ASIG", "ABZW", "ÜST", "VSIG"]):
             self.flag = Flags.OFFENE_STRECKE
             return
@@ -105,7 +110,6 @@ class Entry:
             self.flag = Flags.GBF
             return
 
-        # TODO: figure out how to add flag PBF to stations that do not use any key words, perhaps use a whitelist
         self.flag = Flags.UNKNOWN
 
     def _matchesEbulaInfoPattern(self) -> bool:
@@ -438,6 +442,12 @@ def getDataFromTimetables(timetables: list, config: Config) -> list[dict]:
     return result
 
 
+def loadStationDefinition() -> dict[str, Flags]:
+    station_dict = readFromJsonFile("stations")
+
+    return {key: Flags[value.upper()] for key, value in station_dict.items()}
+
+
 def extrapolateDataFromZusi() -> list[dict]:
     res = readFromJsonFile("config")
 
@@ -475,6 +485,9 @@ def createDatabaseWithData(keys: dict.keys, data: list[tuple]):
         con.commit()
 
     print("Zugdienste in Datenbank eingetragen.")
+
+
+stations: dict[str, Flags] = loadStationDefinition()
 
 
 def main():
