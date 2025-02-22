@@ -94,15 +94,15 @@ class Entry:
             self.flag = flag
             return
 
-        if self._nameContains(["SBK", "BK", "ESIG", "ZSIG", "ASIG", "ABZW", "ÜST", "VSIG"]):
+        if self._nameContains(["SBK", "BK", "ESIG", "ZSIG", "ASIG", "ABZW", "ÜST", "VSIG", "LZB", "NACH", "BKSIG", "LZB-BK", "BKSIG", "STRECKENENDE", "ENDE"]):
             self.flag = Flags.OFFENE_STRECKE
             return
 
-        if self._nameContains(["BFT", "BBF"]):
+        if self._nameContains(["BBF", "ÜST"]):
             self.flag = Flags.BETRIEBSSTELLE
             return
 
-        if self._nameContains(["HP", "PBF", "HBF", "BF", "HST"]):
+        if self._nameContains(["HP", "PBF", "HBF", "BF", "HST", "BFT"]):
             self.flag = Flags.PBF
             return
 
@@ -270,12 +270,12 @@ class Service:
 
         # 3 - kein planmäßiger stopp, jedoch starten wir im PBF oder GBF
         if closestPoint is not None and closestPoint.runningDistance < 800:
-            # naher punkt hat selben namen wie zuglauf
+            # 3.1 naher punkt hat selben namen wie zuglauf
             if zuglauf_start in closestPoint.name:
                 self._start.flag = closestPoint.flag
                 return
 
-            # naher punkter hat selben namen wie start trn
+            # 3.2 naher punkter hat selben namen wie start trn
             if closestPoint.name == self._start.name:
                 return
 
@@ -384,7 +384,7 @@ def getFilteredText(text: str) -> str:
 
 
 def readFromJsonFile(filename: str, prefix: str = "") -> dict:
-    with open(f'{prefix}{filename}.json', "r") as json_data_file:
+    with open(f'{prefix}{filename}.json', "r", encoding="utf-8") as json_data_file:
         return json.load(json_data_file)
 
 
