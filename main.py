@@ -94,7 +94,7 @@ class Entry:
             self.flag = flag
             return
 
-        if self._nameContains(["SBK", "BK", "ESIG", "ZSIG", "ASIG", "ABZW", "ÜST", "VSIG"]):
+        if self._nameContains(["SBK", "BK", "ESIG", "ZSIG", "ASIG", "ABZW", "ÜST", "VSIG", "LZB", "NACH", "BKSIG", "LZB-BK", "BKSIG", "STRECKENENDE", "ENDE"]):
             self.flag = Flags.OFFENE_STRECKE
             return
 
