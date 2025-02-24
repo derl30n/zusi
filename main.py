@@ -298,7 +298,11 @@ class Service:
 
         self._hasEvent = any(len(row.findall('Ereignis')) > 0 for row in trn_rows)
 
-        self.isValid = all([self._start.timeArr, self._end.timeDep])
+        self.isValid = all([
+            self._start.timeArr is not None,
+            self._end.timeDep is not None,
+            (self._end.timeArr or self._end.timeDep) > self._start.timeDep
+        ])
 
     @staticmethod
     def _filter_consecutive_duplicates(entryTimetableListDepArrTimes: list[EntryTimetable]) -> list[EntryTimetable]:
