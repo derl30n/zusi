@@ -208,6 +208,9 @@ class Service:
         self._turnarounds = 0
         self._hasEvent = False
 
+        if bool(trn.get("Dekozug")):
+            return
+
         self._isPassengerTrain = bool(trn.get("Zugtyp"))
         self._zuglauf = trn.get("Zuglauf")
 
