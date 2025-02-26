@@ -41,7 +41,8 @@ class Entry:
         'hasEvent',
         'isTurnAround',
         'runningDistance',
-        'isEbulaInfo'
+        'isEbulaInfo',
+        "hasSignalInfo"
     )
 
     name: str
@@ -52,6 +53,7 @@ class Entry:
     hasEvent: bool
     flag: Flags
     isEbulaInfo: bool
+    hasSignalInfo: bool
 
     def __init__(
             self,
@@ -60,7 +62,8 @@ class Entry:
             timeDep: datetime | None,
             isTurnAround: bool = False,
             runningDistance: int = 0,
-            isEbulaInfo: bool = False
+            isEbulaInfo: bool = False,
+            hasSignalInfo: bool = False
     ):
         self.name = name
         self.timeArr = timeArr
@@ -68,6 +71,7 @@ class Entry:
         self.isTurnAround = isTurnAround
         self.runningDistance = runningDistance
         self.isEbulaInfo = isEbulaInfo
+        self.hasSignalInfo = hasSignalInfo
 
         # we do this so that we can always read timeDep, no influence on functionality
         if all([name, timeArr]) and self.timeDep is None:
@@ -75,12 +79,16 @@ class Entry:
 
         self.flag = Flags.INVALID
 
+        # for some reason some timetables have an empty entry with a space as name
+        if self.name == " ":
+            return
+
         if self.isEbulaInfo:
             self.flag = Flags.TIMETABLE_INFO
             return
 
-        if self.name is None:
-            if self.timeArr and self.timeDep:
+        if self.name == "":
+            if self.timeArr and self.timeDep or hasSignalInfo:
                 self.flag = Flags.OFFENE_STRECKE
 
             return
@@ -94,16 +102,17 @@ class Entry:
             self.flag = flag
             return
 
-        if self._nameContains(["SBK", "BK", "ESIG", "ZSIG", "ASIG", "ABZW", "ÜST", "VSIG", "LZB", "NACH", "BKSIG", "LZB-BK", "BKSIG", "STRECKENENDE", "ENDE"]):
+        # sometimes
+        if self._nameContains(["HP", "PBF", "HBF", "BF", "HST", "BFT"]):
+            self.flag = Flags.PBF
+            return
+
+        if self._nameContains(["SBK", "BK", "ESIG", "ZSIG", "ASIG", "ABZW", "ÜST", "VSIG", "LZB", "NACH", "BKSIG", "LZB-BK", "BKSIG", "STRECKENENDE", "ENDE", "STRECKENBEGINN"]):
             self.flag = Flags.OFFENE_STRECKE
             return
 
         if self._nameContains(["BBF", "ÜST"]):
             self.flag = Flags.BETRIEBSSTELLE
-            return
-
-        if self._nameContains(["HP", "PBF", "HBF", "BF", "HST", "BFT"]):
-            self.flag = Flags.PBF
             return
 
         if self._nameContains(["GBF", "RBF"]):
@@ -141,14 +150,23 @@ class EntryTimetable(Entry):
         arr = rawEntry.findall('FplAnk')
         dep = rawEntry.findall('FplAbf')
         isEbulaInfo = len(rawEntry.findall('FplIcon')) > 0
+        hasSignalInfo = len(rawEntry.findall('FplSignaltyp')) > 0
 
-        nameStr = name[0].get('FplNameText') if len(name) > 0 else None
+        nameStr = name[0].get('FplNameText') if len(name) > 0 else ""
         arrStr = self.getTime(arr[0].get('Ank')) if len(arr) > 0 else None
         depStr = self.getTime(dep[0].get('Abf')) if len(dep) > 0 else None
         isTurnAround = rawEntry.find('FplRichtungswechsel') is not None
         runningDistance = int(float(dist)) if dist is not None else 0
 
-        super().__init__(name=nameStr, timeArr=arrStr, timeDep=depStr, isTurnAround=isTurnAround, runningDistance=runningDistance, isEbulaInfo=isEbulaInfo)
+        super().__init__(
+            name=nameStr,
+            timeArr=arrStr,
+            timeDep=depStr,
+            isTurnAround=isTurnAround,
+            runningDistance=runningDistance,
+            isEbulaInfo=isEbulaInfo,
+            hasSignalInfo=hasSignalInfo
+        )
 
 
 class EntryTrn(Entry):
@@ -254,31 +272,25 @@ class Service:
         self._constructRoute(entryTimetableList, trn_rows, link)
 
     def _setStartTag(self, timetableStart: EntryTimetable, closestPoint: EntryTimetable) -> None:
-        # Annahme:
-        # 1. zuglauf start == trn start -> gegebenes trn start Flag
-        # 2. entry timetable (mit arr und dep) < 800m FplLaufweg -> gegebenes timetable entry Flag
-        # 3. nahegelegender entry timetable (mit PBF, GBF Flag) < 800m FplLaufweg -> gegebenes timetable entry Flag
-        # sonst immer Flags.OFFENE_STRECKE
-
         zuglauf_start = self._zuglauf.split(" - ")[0]
 
-        # 1.
+        # 1 - zuglauf start == trn start -> gegebenes trn start Flag
         if zuglauf_start in self._start.name:
             return
 
-        # 2
+        # 2 - entry timetable (mit arr und dep) < 800m FplLaufweg -> gegebenes timetable entry Flag
         if timetableStart is not None and timetableStart.runningDistance < 800:
             self._start.flag = timetableStart.flag
             return
 
         # 3 - kein planmäßiger stopp, jedoch starten wir im PBF oder GBF
         if closestPoint is not None and closestPoint.runningDistance < 800:
-            # 3.1 naher punkt hat selben namen wie zuglauf
+            # 3.1 - naher punkt hat selben namen wie zuglauf
             if zuglauf_start in closestPoint.name:
                 self._start.flag = closestPoint.flag
                 return
 
-            # 3.2 naher punkter hat selben namen wie start trn
+            # 3.2 - naher punkter hat selben namen wie start trn
             if closestPoint.name == self._start.name:
                 return
 
