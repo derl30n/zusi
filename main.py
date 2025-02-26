@@ -42,7 +42,8 @@ class Entry:
         'isTurnAround',
         'runningDistance',
         'isEbulaInfo',
-        "hasSignalInfo"
+        'hasSignalInfo',
+        'isHolding'
     )
 
     name: str
@@ -54,6 +55,7 @@ class Entry:
     flag: Flags
     isEbulaInfo: bool
     hasSignalInfo: bool
+    isHolding: bool
 
     def __init__(
             self,
@@ -70,7 +72,8 @@ class Entry:
         self.timeDep = timeDep
         self.isTurnAround = isTurnAround
         self.runningDistance = runningDistance
-        self.isEbulaInfo = isEbulaInfo
+        self.isHolding = timeArr is not None and timeDep is not None
+        self.isEbulaInfo = isEbulaInfo and not self.isHolding  # we can not exclude this info if it's relevant e.g. has times defined
         self.hasSignalInfo = hasSignalInfo
 
         # we do this so that we can always read timeDep, no influence on functionality
@@ -126,6 +129,9 @@ class Entry:
 
     def _nameContains(self, keyword_list: list[str]) -> bool:
         return any(keyword.lower() in self.name.lower().split(" ") for keyword in keyword_list)
+
+    def isPlannedStationary(self) -> bool:
+        return self.timeDep is not None and self.timeArr is not None and self.timeDep > self.timeArr
 
     @staticmethod
     def getTime(timeString: str | None) -> datetime | None:
@@ -292,9 +298,39 @@ class Service:
 
             # 3.2 - naher punkter hat selben namen wie start trn
             if closestPoint.name == self._start.name:
+                self._start.isHolding = closestPoint.timeArr is not None and self._start.timeDep is not None  # ensures we are not accidentally creating an entry with holding time
                 return
 
         self._start.flag = Flags.OFFENE_STRECKE
+
+    def _setEndFlag(self, closestTimedPoint: EntryTimetable, timetableEnd: EntryTimetable, closestPoint: EntryTimetable) -> None:
+        zuglauf_end = self._zuglauf.split(" - ")[-1]
+
+        # 1
+        if closestTimedPoint is not None and self._end.runningDistance - closestTimedPoint.runningDistance < 900:
+            self._end = closestTimedPoint
+            return
+
+        # 2
+        if timetableEnd is not None and self._end.runningDistance - timetableEnd.runningDistance < 900:
+            self._end = timetableEnd
+            return
+
+        # 3
+        if closestPoint is not None and self._end.runningDistance - closestPoint.runningDistance < 900:
+            # 3.1
+            if zuglauf_end in closestPoint.name:
+                self._end.flag = closestPoint.flag
+                self._end.runningDistance = closestPoint.runningDistance
+
+                self._end.timeDep = self._end.timeDep or closestPoint.timeDep
+                self._end.timeArr = self._end.timeArr or closestPoint.timeArr
+
+                return
+
+            # 3.2
+            if closestPoint.name == self._end.name:
+                return
 
     def _constructRoute(self, entryTimetableList: list[EntryTimetable], trn_rows: list, link: str) -> None:
         entryTimetableListDepArrTimes: list[EntryTimetable] = [entry for entry in entryTimetableList if all([entry.timeArr, entry.timeDep])]
@@ -305,11 +341,20 @@ class Service:
             next((entry for entry in entryTimetableList if any([entry.flag.PBF, entry.flag.GBF])), None)
         )
 
-        self._plannedStopps = self._filter_consecutive_duplicates(entryTimetableListDepArrTimes)
-        self._end = next((entry for entry in reversed(entryTimetableList) if entry.timeDep is not None), None)
+        self._end = entryTimetableList[-1]
+        self._setEndFlag(
+            next((entry for entry in reversed(entryTimetableList) if any([entry.timeArr, entry.timeDep])), None),
+            entryTimetableListDepArrTimes[-1] if entryTimetableListDepArrTimes else None,
+            next((entry for entry in reversed(entryTimetableList) if any([entry.flag.PBF, entry.flag.GBF])), None)
+        )
 
-        if self._end is None:
-            return
+        # fallback in case our timetable entry has no times, loop because the last trn entry hasn't always times...
+        if self._end.timeDep is None:
+            self._end.timeDep = next(
+                (entry.timeDep for trn in reversed(trn_rows) if (entry := EntryTrn(trn)).timeDep), None
+            )
+
+        self._plannedStopps = self._filter_consecutive_duplicates(entryTimetableListDepArrTimes)
 
         self._hasEvent = any(len(row.findall('Ereignis')) > 0 for row in trn_rows)
 
@@ -374,6 +419,8 @@ class Service:
             "w1": self._turnarounds,
             "start": self._start.flag.name,
             "ende": self._end.flag.name,
+            "start_halt": self._start.isHolding,
+            "end_halt": self._end.isPlannedStationary(),
             "s_km": int(self._end.runningDistance / 1000),
             "dv": dv,
             "country": self._country,
