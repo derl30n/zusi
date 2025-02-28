@@ -72,7 +72,7 @@ class Entry:
         self.timeDep = timeDep
         self.isTurnAround = isTurnAround
         self.runningDistance = runningDistance
-        self.isHolding = timeArr is not None and timeDep is not None
+        self.isHolding = timeArr is not None and timeDep is not None and timeArr < timeDep
         self.isEbulaInfo = isEbulaInfo and not self.isHolding  # we can not exclude this info if it's relevant e.g. has times defined
         self.hasSignalInfo = hasSignalInfo
 
