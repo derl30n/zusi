@@ -428,7 +428,8 @@ class Service:
             "fahrplan": self._fahrplan,
             "aufgleispunkt": self._start.name,
             "zuglauf": self._zuglauf,
-            "halte": ", ".join(stopp.name for stopp in self._plannedStopps)
+            "halte": ", ".join(stopp.name for stopp in self._plannedStopps),
+            "end": self._end.name
         }
 
 
