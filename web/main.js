@@ -37,9 +37,6 @@ const endList = document.getElementById('end-list');
 const endSelectAll = document.getElementById('end-select-all');
 const endDeselectAll = document.getElementById('end-deselect-all');
 const endHaltFilter = document.getElementById('filter-end-halt');
-const nhalteSlider = document.getElementById('nhalte-slider');
-const nhalteMinValue = document.getElementById('nhalte-min-value');
-const nhalteMaxValue = document.getElementById('nhalte-max-value');
 const evFilter = document.getElementById('filter-ev');
 const w1MinFilter = document.getElementById('filter-w1-min');
 const w1MaxFilter = document.getElementById('filter-w1-max');
@@ -47,6 +44,12 @@ const resultsBody = document.getElementById('results-body');
 const resultsCount = document.getElementById('results-count');
 const stopsModal = document.getElementById('stops-modal');
 const stopsContent = document.getElementById('stops-content');
+// Add native dual-range slider variables
+const nhalteMinInput = document.getElementById('nhalte-min');
+const nhalteMaxInput = document.getElementById('nhalte-max');
+const nhalteMinValue = document.getElementById('nhalte-min-value');
+const nhalteMaxValue = document.getElementById('nhalte-max-value');
+
 const closeModal = document.getElementsByClassName('close')[0];
 
 debug.innerHTML = `Loaded ${trainData.length} records. Sample: ${JSON.stringify(trainData[0], null, 2)}`;
@@ -62,28 +65,55 @@ let lastBRState = { values: [], checked: new Set() };
 let lastStartState = { values: [], checked: new Set(), active: [] };
 let lastEndState = { values: [], checked: new Set(), active: [] };
 
-// Initialize nhalte slider
+// Initialize slider with full range
 const fullNhalteMin = Math.min(...trainData.map(d => d.nhalte).filter(v => v != null));
 const fullNhalteMax = Math.max(...trainData.map(d => d.nhalte).filter(v => v != null));
-noUiSlider.create(nhalteSlider, {
-    start: [fullNhalteMin, fullNhalteMax],
-    range: { min: fullNhalteMin, max: fullNhalteMax },
-    step: 1, // Fixed step size of 1
-    connect: true,
-    format: { to: value => Math.round(value), from: value => Math.round(value) },
-    pips: {
-        mode: 'steps',
-        stepped: true,
-        density: 5,
-        filter: value => (value % 5 === 0 ? 1 : 0) // Mark every 5 for readability
+
+nhalteMinInput.min = fullNhalteMin;
+nhalteMinInput.max = fullNhalteMax;
+nhalteMinInput.value = fullNhalteMin;
+nhalteMaxInput.min = fullNhalteMin;
+nhalteMaxInput.max = fullNhalteMax;
+nhalteMaxInput.value = fullNhalteMax;
+
+// Update displayed values and gradient
+function updateSliderDisplay() {
+    const minVal = Number(nhalteMinInput.value);
+    const maxVal = Number(nhalteMaxInput.value);
+    nhalteMinValue.textContent = minVal;
+    nhalteMaxValue.textContent = maxVal;
+
+    const range = fullNhalteMax - fullNhalteMin;
+    const minPercentage = ((minVal - fullNhalteMin) / range) * 100;
+    const maxPercentage = ((maxVal - fullNhalteMin) / range) * 100;
+    nhalteMinInput.style.setProperty('--min-percentage', `${minPercentage}%`);
+    nhalteMinInput.style.setProperty('--max-percentage', `${maxPercentage}%`);
+}
+
+// Ensure min doesn’t exceed max and vice versa
+function adjustValues() {
+    const minVal = Number(nhalteMinInput.value);
+    const maxVal = Number(nhalteMaxInput.value);
+    if (minVal > maxVal) {
+        nhalteMinInput.value = maxVal;
+    } else if (maxVal < minVal) {
+        nhalteMaxInput.value = minVal;
     }
+    updateSliderDisplay();
+}
+
+// Event listeners
+nhalteMinInput.addEventListener('input', () => {
+    adjustValues();
 });
-nhalteSlider.noUiSlider.on('update', () => {
-    const [min, max] = nhalteSlider.noUiSlider.get().map(Number);
-    nhalteMinValue.textContent = min;
-    nhalteMaxValue.textContent = max;
+nhalteMaxInput.addEventListener('input', () => {
+    adjustValues();
 });
-nhalteSlider.noUiSlider.on('change', () => {
+nhalteMinInput.addEventListener('change', () => {
+    nhalteAdjusted = true;
+    filterData();
+});
+nhalteMaxInput.addEventListener('change', () => {
     nhalteAdjusted = true;
     filterData();
 });
@@ -150,7 +180,8 @@ function getBaselineData(countryFilteredData) {
     const selectedStarts = Array.from(document.querySelectorAll('.start-checkbox:checked')).map(cb => cb.value);
     const selectedEnds = Array.from(document.querySelectorAll('.end-checkbox:checked')).map(cb => cb.value);
     const gattungTerms = gattungFilter.value.trim().split(/\s+/).filter(t => t);
-    const [nhalteMin, nhalteMax] = nhalteSlider.noUiSlider.get().map(Number);
+    const nhalteMin = Number(nhalteMinInput.value);
+    const nhalteMax = Number(nhalteMaxInput.value);
 
     return countryFilteredData.filter(item => {
         const beginMinutes = timeToMinutes(item.begin);
@@ -230,15 +261,12 @@ function updateSlider(filteredData) {
     const nhalteValues = filteredData.map(d => d.nhalte).filter(v => v != null);
     const currentNhalteMin = nhalteValues.length ? Math.min(...nhalteValues) : fullNhalteMin;
     const currentNhalteMax = nhalteValues.length ? Math.max(...nhalteValues) : fullNhalteMax;
-    if (!nhalteAdjusted) {{
-        nhalteSlider.noUiSlider.set([currentNhalteMin, currentNhalteMax]);
-    }}
-    const [nhalteSelectedMin, nhalteSelectedMax] = nhalteSlider.noUiSlider.get().map(Number);
-    const nhalteRangeWidth = fullNhalteMax - fullNhalteMin;
-    const nhalteBeforeWidth = ((Math.max(nhalteSelectedMin, currentNhalteMin) - nhalteSelectedMin) / nhalteRangeWidth) * 100;
-    const nhalteAfterWidth = ((nhalteSelectedMax - Math.min(nhalteSelectedMax, currentNhalteMax)) / nhalteRangeWidth) * 100;
-    nhalteSlider.style.setProperty('--before-width', `${{nhalteBeforeWidth}}%`);
-    nhalteSlider.style.setProperty('--after-width', `${{nhalteAfterWidth}}%`);
+
+    if (!nhalteAdjusted) {
+        nhalteMinInput.value = currentNhalteMin;
+        nhalteMaxInput.value = currentNhalteMax;
+        updateSliderDisplay();
+    }
 }
 
 function updateFilters(countryFilteredData, baselineData, brFilteredData, brCheckboxFilteredData, routeFilteredData, filteredData) {
@@ -312,7 +340,8 @@ function displayResults(data) {
     const selectedBRs = Array.from(document.querySelectorAll('.br-checkbox:checked')).map(cb => cb.value);
     const selectedStarts = Array.from(document.querySelectorAll('.start-checkbox:checked')).map(cb => cb.value);
     const selectedEnds = Array.from(document.querySelectorAll('.end-checkbox:checked')).map(cb => cb.value);
-    const [nhalteMin, nhalteMax] = nhalteSlider.noUiSlider.get().map(Number);
+    const nhalteMin = Number(nhalteMinInput.value);
+    const nhalteMax = Number(nhalteMaxInput.value);
 
     const hiddenCols = new Set();
     if (artFilter.value) hiddenCols.add('art');
@@ -435,4 +464,5 @@ endDeselectAll.addEventListener('click', () => {
     element.addEventListener('keyup', filterData);
 });
 
+updateSliderDisplay();
 filterData();
