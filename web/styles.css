@@ -1,0 +1,108 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+    background-color: #1e1e1e;
+    color: #ffffff;
+}
+.filter-container {
+    display: flex;
+    background-color: #2d2d2d;
+    padding: 15px;
+    margin-bottom: 20px;
+    border-radius: 5px;
+}
+.left-panel, .center-panel, .right-panel {
+    margin-right: 15px;
+}
+.left-panel { width: 30%; }
+.center-panel { width: 40%; display: flex; flex-direction: column; }
+.right-panel { width: 30%; }
+.checkbox-list { border: 1px solid #555; padding: 5px; background-color: #333; }
+.scrollable-checkbox-list { max-height: 500px; overflow-y: auto; border: 1px solid #555; padding: 5px; background-color: #333; }
+.checkbox-item { margin: 5px 0; }
+.checkbox-item.disabled label { color: #777; }
+.filter-row { margin-bottom: 10px; display: flex; align-items: center; }
+.start-end-row { display: flex; justify-content: space-between; margin-bottom: 10px; }
+.start-end-group { width: 48%; }
+.start-end-header { display: flex; align-items: center; margin-bottom: 5px; }
+label { margin-right: 10px; width: 100px; }
+table { width: 100%; max-width: 1200px; border-collapse: collapse; margin: 20px auto; background-color: #1e1e1e; }
+th, td { padding: 8px; border: 1px solid #444; text-align: left; font-size: 12px; }
+th { background-color: #3c3c3c; }
+tr:nth-child(even) { background-color: #2a2a2a; }
+select, input[type="text"] { padding: 5px; margin-right: 10px; border-radius: 3px; border: 1px solid #555; background-color: #333; color: #fff; }
+input[type="checkbox"] { margin-right: 5px; }
+input[type="checkbox"]:disabled { opacity: 0.5; }
+.results-count { margin: 10px 0; font-weight: bold; text-align: center; }
+#debug { color: #ff4444; font-size: 12px; }
+button { padding: 5px; margin-right: 10px; background-color: #444; color: #fff; border: 1px solid #555; border-radius: 3px; cursor: pointer; }
+button:hover { background-color: #555; }
+.time-group span, .stops-group span { margin-right: 5px; }
+.select-group { margin-top: 5px; }
+.modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); }
+.modal-content { background-color: #2d2d2d; margin: 15% auto; padding: 20px; border: 1px solid #555; width: 50%; max-height: 60%; overflow-y: auto; }
+.close { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
+.close:hover { color: #fff; }
+/* Slider styles */
+.slider-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+.slider-values {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 5px;
+    font-size: 12px;
+    color: #ccc;
+}
+.nouislider {
+    width: 100%; /* Full width of container */
+    margin-bottom: 15px; /* Reduced from 20px */
+}
+.noUi-base {
+    background: #555; /* Gray background */
+    height: 2px !important; /* Super thin track */
+}
+.noUi-connect {
+    background: #007acc; /* Blue selected range */
+    height: 2px !important; /* Super thin track */
+}
+.noUi-handle {
+    width: 8px; /* Even smaller handles */
+    height: 8px;
+    border-radius: 50%;
+    background: #fff;
+    border: 1px solid #007acc;
+    box-shadow: none;
+    cursor: grab;
+    top: -3px; /* Adjusted to center on thinner track (was -4px) */
+    right: -4px; /* Adjusted to center smaller handle (was -6px) */
+    transition: transform 0.2s ease;
+}
+.noUi-handle:hover {
+    transform: scale(1.2); /* Slightly smaller scale on hover (was 1.33) */
+}
+.noUi-base::before, .noUi-base::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: rgba(255, 0, 0, 0.5); /* Red shading for excluded ranges */
+    z-index: 1;
+}
+.noUi-base::before { left: 0; width: var(--before-width); }
+.noUi-base::after { right: 0; width: var(--after-width); }
+.noUi-pips {
+    color: #ccc;
+    font-size: 10px;
+}
+.noUi-marker {
+    background: #777;
+    height: 4px; /* Slightly smaller markers */
+}
+.noUi-value {
+    top: 6px; /* Adjusted for thinner slider (was 10px) */
+}

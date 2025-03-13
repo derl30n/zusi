@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Train Services Filter</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.5.0/nouislider.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.5.0/nouislider.min.js"></script>
+</head>
+<body>
+    <h1>Train Services Filter</h1>
+    <div id="debug"></div>
+
+    <div class="filter-container">
+        <div class="left-panel">
+            <label title="country">Countries:</label>
+            <div class="checkbox-list" id="country-list"></div>
+            <div class="select-group">
+                <span>Select:</span>
+                <button id="country-select-all">All</button>
+                <button id="country-deselect-all">None</button>
+            </div>
+            <br>
+            <label title="route">Routes:</label>
+            <div class="checkbox-list" id="route-list"></div>
+            <div class="select-group">
+                <span>Select:</span>
+                <button id="route-select-all">All</button>
+                <button id="route-deselect-all">None</button>
+            </div>
+        </div>
+        <div class="center-panel">
+            <div class="filter-row">
+                <label title="art">Type:</label>
+                <select id="filter-art">
+                    <option value="">All</option>
+                    <option value="P">Passenger (P)</option>
+                    <option value="C">Cargo (C)</option>
+                </select>
+            </div>
+            <div class="filter-row">
+                <label title="gattung">Category:</label>
+                <input type="text" id="filter-gattung" placeholder="e.g., IC or ME RE">
+                <label><input type="checkbox" id="exact-gattung"> Exact</label>
+            </div>
+            <div class="filter-row">
+                <label title="zugnr">Train Number:</label>
+                <input type="text" id="filter-zugnr" placeholder="Enter train number">
+                <label><input type="checkbox" id="exact-zugnr"> Exact</label>
+            </div>
+            <div class="filter-row">
+                <label title="br">BR:</label>
+                <input type="text" id="filter-br" placeholder="e.g., 101">
+                <label><input type="checkbox" id="exact-br"> Exact</label>
+            </div>
+            <div class="filter-row">
+                <label title="begin">Start Time:</label>
+                <div class="time-group">
+                    <span>Min</span><input type="text" id="filter-begin-min" placeholder="HH:MM" size="3">
+                    <span>Max</span><input type="text" id="filter-begin-max" placeholder="HH:MM" size="3">
+                </div>
+            </div>
+            <div class="filter-row">
+                <label title="fahrzeit">Duration:</label>
+                <div class="time-group">
+                    <span>Min</span><input type="text" id="filter-fahrzeit-min" placeholder="HH:MM" size="3">
+                    <span>Max</span><input type="text" id="filter-fahrzeit-max" placeholder="HH:MM" size="3">
+                </div>
+            </div>
+            <div class="filter-row">
+                <label title="nhalte">Stops:</label>
+                <div class="slider-container">
+                    <div class="slider-values">
+                        <span id="nhalte-min-value"></span>
+                        <span id="nhalte-max-value"></span>
+                    </div>
+                    <div id="nhalte-slider" class="nouislider"></div>
+                </div>
+            </div>
+            <div class="filter-row">
+                <label title="s_km">Distance:</label>
+                <div class="time-group">
+                    <span>Min</span><input type="text" id="filter-skm-min" size="2">
+                    <span>Max</span><input type="text" id="filter-skm-max" size="2">
+                </div>
+            </div>
+            <div class="filter-row">
+                <label title="dv">Avg Speed:</label>
+                <div class="time-group">
+                    <span>Min</span><input type="text" id="filter-dv-min" size="2">
+                    <span>Max</span><input type="text" id="filter-dv-max" size="2">
+                </div>
+            </div>
+            <div class="filter-row">
+                <label title="laenge">Length:</label>
+                <div class="time-group">
+                    <span>Min</span><input type="text" id="filter-laenge-min" size="2">
+                    <span>Max</span><input type="text" id="filter-laenge-max" size="2">
+                </div>
+            </div>
+            <div class="filter-row">
+                <label title="masse">Mass:</label>
+                <div class="time-group">
+                    <span>Min</span><input type="text" id="filter-masse-min" size="2">
+                    <span>Max</span><input type="text" id="filter-masse-max" size="2">
+                </div>
+            </div>
+            <div class="start-end-row">
+                <div class="start-end-group">
+                    <div class="start-end-header">
+                        <label title="start">Start Types:</label>
+                        <label><input type="checkbox" id="filter-start-halt" title="start_halt"> Timed</label>
+                    </div>
+                    <div class="scrollable-checkbox-list" id="start-list"></div>
+                    <div class="select-group">
+                        <span>Select:</span>
+                        <button id="start-select-all">All</button>
+                        <button id="start-deselect-all">None</button>
+                    </div>
+                </div>
+                <div class="start-end-group">
+                    <div class="start-end-header">
+                        <label title="ende">End Types:</label>
+                        <label><input type="checkbox" id="filter-end-halt" title="end_halt"> Timed</label>
+                    </div>
+                    <div class="scrollable-checkbox-list" id="end-list"></div>
+                    <div class="select-group">
+                        <span>Select:</span>
+                        <button id="end-select-all">All</button>
+                        <button id="end-deselect-all">None</button>
+                    </div>
+                </div>
+            </div>
+            <div class="filter-row">
+                <label title="ev">Has Events:</label>
+                <input type="checkbox" id="filter-ev">
+            </div>
+            <div class="filter-row">
+                <label title="w1">Turnarounds:</label>
+                <div class="stops-group">
+                    <span>Min</span><select id="filter-w1-min"></select>
+                    <span>Max</span><select id="filter-w1-max"></select>
+                </div>
+            </div>
+        </div>
+        <div class="right-panel">
+            <label title="br">BR List:</label>
+            <div class="scrollable-checkbox-list" id="br-list"></div>
+            <div class="select-group">
+                <span>Select:</span>
+                <button id="br-select-all">All</button>
+                <button id="br-deselect-all">None</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="results-count" id="results-count">Showing 0 results</div>
+    <table id="results-table">
+        <thead>
+        <tr>
+            <th data-col="zugnr">Train Nr</th>
+            <th data-col="art">Type</th>
+            <th data-col="gattung">Category</th>
+            <th data-col="begin">Start Time</th>
+            <th data-col="fahrzeit">Duration</th>
+            <th data-col="br">BR</th>
+            <th data-col="laenge">Length</th>
+            <th data-col="masse">Mass</th>
+            <th data-col="nhalte">Stops</th>
+            <th data-col="ev">EV</th>
+            <th data-col="w1">W1</th>
+            <th data-col="start">Start</th>
+            <th data-col="ende">End</th>
+            <th data-col="start_halt">Start Halt</th>
+            <th data-col="end_halt">End Halt</th>
+            <th data-col="s_km">S KM</th>
+            <th data-col="dv">DV</th>
+            <th data-col="country">Country</th>
+            <th data-col="route">Route</th>
+            <th data-col="fahrplan">Fahrplan</th>
+            <th data-col="aufgleispunkt">Aufgleispunkt</th>
+            <th data-col="zuglauf">Zuglauf</th>
+            <th data-col="halte">Halte</th>
+        </tr>
+        </thead>
+        <tbody id="results-body"></tbody>
+    </table>
+
+    <div id="stops-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">×</span>
+            <h2>Stops</h2>
+            <div id="stops-content"></div>
+        </div>
+    </div>
+
+    <script src="main.js"></script>
+</body>
+</html>
