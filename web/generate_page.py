@@ -378,6 +378,8 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             const selectedStarts = Array.from(document.querySelectorAll('.start-checkbox:checked')).map(cb => cb.value);
             const selectedEnds = Array.from(document.querySelectorAll('.end-checkbox:checked')).map(cb => cb.value);
             const gattungTerms = gattungFilter.value.trim().split(/\s+/).filter(t => t);
+            const nhalteMin = nhalteMinFilter.value !== '' ? Number(nhalteMinFilter.value) : null; // Moved here
+            const nhalteMax = nhalteMaxFilter.value !== '' ? Number(nhalteMaxFilter.value) : null; // Moved here
     
             return countryFilteredData.filter(item => {
                 const beginMinutes = timeToMinutes(item.begin);
@@ -411,6 +413,8 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                     (!laengeMax || (item.laenge && item.laenge <= laengeMax)) &&
                     (!masseMin || (item.masse && item.masse >= masseMin)) &&
                     (!masseMax || (item.masse && item.masse <= masseMax)) &&
+                    (nhalteMin === null || (item.nhalte !== null && item.nhalte >= nhalteMin)) && // Added here
+                    (nhalteMax === null || (item.nhalte !== null && item.nhalte <= nhalteMax)) && // Added here
                     (selectedStarts.length === 0 || (item.start && selectedStarts.includes(item.start))) &&
                     (!startHaltFilter.checked || (item.start_halt && item.start_halt === 1)) &&
                     (selectedEnds.length === 0 || (item.ende && selectedEnds.includes(item.ende))) &&
@@ -426,8 +430,6 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             const selectedRoutes = Array.from(document.querySelectorAll('.route-checkbox:checked')).map(cb => cb.value);
             const selectedBRs = Array.from(document.querySelectorAll('.br-checkbox:checked')).map(cb => cb.value);
             const brTerms = brFilter.value.trim().split(/\s+/).filter(t => t);
-            const nhalteMin = nhalteMinFilter.value !== '' ? Number(nhalteMinFilter.value) : null;
-            const nhalteMax = nhalteMaxFilter.value !== '' ? Number(nhalteMaxFilter.value) : null;
             const w1Min = w1MinFilter.value !== '' ? Number(w1MinFilter.value) : null;
             const w1Max = w1MaxFilter.value !== '' ? Number(w1MaxFilter.value) : null;
     
@@ -435,20 +437,21 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                 (!brFilter.value || (item.br && (exactBR.checked ? item.br === brFilter.value : brTerms.every(term => item.br.includes(term)))))
             );
     
-            const filtered = brFilteredData.filter(item =>
-                (selectedRoutes.length === 0 || (item.route && selectedRoutes.includes(item.route))) &&
+            let routeFilteredData = brFilteredData.filter(item =>
+                (selectedRoutes.length === 0 || (item.route && selectedRoutes.includes(item.route)))
+            );
+    
+            const filtered = routeFilteredData.filter(item =>
                 (selectedBRs.length === 0 || (item.br && selectedBRs.includes(item.br))) &&
-                (nhalteMin === null || (item.nhalte !== null && item.nhalte >= nhalteMin)) &&
-                (nhalteMax === null || (item.nhalte !== null && item.nhalte <= nhalteMax)) &&
                 (w1Min === null || (item.w1 !== null && item.w1 >= w1Min)) &&
                 (w1Max === null || (item.w1 !== null && item.w1 <= w1Max))
             );
     
-            updateFilters(countryFilteredData, baselineData, brFilteredData, filtered);
+            updateFilters(countryFilteredData, baselineData, brFilteredData, routeFilteredData, filtered);
             displayResults(filtered);
         }
     
-        function updateFilters(countryFilteredData, baselineData, brFilteredData, filteredData) {
+        function updateFilters(countryFilteredData, baselineData, brFilteredData, routeFilteredData, filteredData) {
             const countryChecked = new Set(Array.from(document.querySelectorAll('.country-checkbox:checked')).map(cb => cb.value));
             const routeChecked = new Set(Array.from(document.querySelectorAll('.route-checkbox:checked')).map(cb => cb.value));
             const brChecked = new Set(Array.from(document.querySelectorAll('.br-checkbox:checked')).map(cb => cb.value));
@@ -457,7 +460,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     
             const allCountries = [...new Set(trainData.map(item => item.country).filter(v => v))].sort();
             const allRoutes = [...new Set(countryFilteredData.map(item => item.route).filter(v => v))].sort();
-            const allBRs = [...new Set(baselineData.map(item => item.br).filter(v => v))].sort();
+            const allBRs = [...new Set(routeFilteredData.map(item => item.br).filter(v => v))].sort();
             const allStarts = [...new Set(trainData.map(item => item.start).filter(v => v))].sort();
             const allEnds = [...new Set(trainData.map(item => item.ende).filter(v => v))].sort();
     
@@ -466,8 +469,8 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             const activeStarts = [...new Set(filteredData.map(item => item.start).filter(v => v))].sort();
             const activeEnds = [...new Set(filteredData.map(item => item.ende).filter(v => v))].sort();
     
-            const baselineNhalteValues = [...new Set(brFilteredData.map(item => item.nhalte).filter(v => v != null))].sort((a, b) => a - b);
-            const baselineW1Values = [...new Set(brFilteredData.map(item => item.w1).filter(v => v != null))].sort((a, b) => a - b);
+            const baselineNhalteValues = [...new Set(routeFilteredData.map(item => item.nhalte).filter(v => v != null))].sort((a, b) => a - b);
+            const baselineW1Values = [...new Set(routeFilteredData.map(item => item.w1).filter(v => v != null))].sort((a, b) => a - b);
     
             // Update countries list only if none are checked
             if (countryChecked.size === 0) {
