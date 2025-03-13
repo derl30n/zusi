@@ -250,7 +250,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 
     <script>
         const trainData = {train_data_json};
-
+    
         const debug = document.getElementById('debug');
         const countryList = document.getElementById('country-list');
         const countrySelectAll = document.getElementById('country-select-all');
@@ -298,9 +298,9 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         const stopsModal = document.getElementById('stops-modal');
         const stopsContent = document.getElementById('stops-content');
         const closeModal = document.getElementsByClassName('close')[0];
-
+    
         debug.innerHTML = `Loaded ${trainData.length} records. Sample: ${JSON.stringify(trainData[0], null, 2)}`;
-
+    
         // Track manual manipulation of range selectors
         const rangeManipulated = {
             nhalteMin: false,
@@ -308,13 +308,20 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             w1Min: false,
             w1Max: false
         };
-
+    
+        // Store last state of each checkbox list
+        let lastCountryState = { values: [], checked: new Set(), active: [] };
+        let lastRouteState = { values: [], checked: new Set(), active: [] };
+        let lastBRState = { values: [], checked: new Set() };
+        let lastStartState = { values: [], checked: new Set(), active: [] };
+        let lastEndState = { values: [], checked: new Set(), active: [] };
+    
         function timeToMinutes(timeStr) {
             if (!timeStr) return null;
             const [hours, minutes] = timeStr.split(':').map(Number);
             return hours * 60 + minutes;
         }
-
+    
         function populateCheckboxList(container, values, className, previouslyChecked, showAllWithDisabled = false, activeValues = null) {
             container.innerHTML = '';
             values.forEach(value => {
@@ -327,21 +334,21 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                 container.appendChild(div);
             });
         }
-
+    
         function populateDropdown(select, values) {
             const currentValue = select.value ? Number(select.value) : null;
             const isMinSelector = select === nhalteMinFilter || select === w1MinFilter;
             const baselineMin = Math.min(...values);
             const baselineMax = Math.max(...values);
             let selectedValue;
-
+    
             if ((isMinSelector && !rangeManipulated[select.id.replace('filter-', '')]) ||
                 (!isMinSelector && !rangeManipulated[select.id.replace('filter-', '')])) {
                 selectedValue = isMinSelector ? baselineMin : baselineMax;
             } else {
                 selectedValue = currentValue;
             }
-
+    
             select.innerHTML = '';
             values.forEach(value => {
                 const option = document.createElement('option');
@@ -349,29 +356,29 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                 option.textContent = value;
                 select.appendChild(option);
             });
-
+    
             if (selectedValue !== null && !values.includes(selectedValue)) {
                 const option = document.createElement('option');
                 option.value = selectedValue;
                 option.textContent = selectedValue;
                 select.appendChild(option);
             }
-
+    
             select.value = selectedValue !== null ? selectedValue : (isMinSelector ? baselineMin : baselineMax);
         }
-
+    
         function getCountryFilteredData() {
             const selectedCountries = Array.from(document.querySelectorAll('.country-checkbox:checked')).map(cb => cb.value);
             return trainData.filter(item => 
                 selectedCountries.length === 0 || (item.country && selectedCountries.includes(item.country))
             );
         }
-
+    
         function getBaselineData(countryFilteredData) {
             const selectedStarts = Array.from(document.querySelectorAll('.start-checkbox:checked')).map(cb => cb.value);
             const selectedEnds = Array.from(document.querySelectorAll('.end-checkbox:checked')).map(cb => cb.value);
             const gattungTerms = gattungFilter.value.trim().split(/\s+/).filter(t => t);
-
+    
             return countryFilteredData.filter(item => {
                 const beginMinutes = timeToMinutes(item.begin);
                 const beginMin = beginMinFilter.value ? timeToMinutes(beginMinFilter.value) : null;
@@ -387,7 +394,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                 const laengeMax = laengeMaxFilter.value ? Number(laengeMaxFilter.value) : null;
                 const masseMin = masseMinFilter.value ? Number(masseMinFilter.value) : null;
                 const masseMax = masseMaxFilter.value ? Number(masseMaxFilter.value) : null;
-
+    
                 return (
                     (!artFilter.value || (item.art && item.art === artFilter.value)) &&
                     (!gattungTerms.length || (exactGattung.checked ? item.gattung === gattungFilter.value : gattungTerms.every(term => item.gattung && item.gattung.includes(term)))) &&
@@ -412,7 +419,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                 );
             });
         }
-
+    
         function filterData() {
             const countryFilteredData = getCountryFilteredData();
             const baselineData = getBaselineData(countryFilteredData);
@@ -423,17 +430,12 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             const nhalteMax = nhalteMaxFilter.value !== '' ? Number(nhalteMaxFilter.value) : null;
             const w1Min = w1MinFilter.value !== '' ? Number(w1MinFilter.value) : null;
             const w1Max = w1MaxFilter.value !== '' ? Number(w1MaxFilter.value) : null;
-
-            // Apply BR text filter to baseline if present
-            let brFilteredData = baselineData;
-            if (brFilter.value) {
-                brFilteredData = baselineData.filter(item => 
-                    item.br && (exactBR.checked ? item.br === brFilter.value : brTerms.every(term => item.br.includes(term)))
-                );
-            }
-
-            // Apply Routes and BR checkbox filters, then range filters
-            const filtered = brFilteredData.filter(item => 
+    
+            let brFilteredData = baselineData.filter(item =>
+                (!brFilter.value || (item.br && (exactBR.checked ? item.br === brFilter.value : brTerms.every(term => item.br.includes(term)))))
+            );
+    
+            const filtered = brFilteredData.filter(item =>
                 (selectedRoutes.length === 0 || (item.route && selectedRoutes.includes(item.route))) &&
                 (selectedBRs.length === 0 || (item.br && selectedBRs.includes(item.br))) &&
                 (nhalteMin === null || (item.nhalte !== null && item.nhalte >= nhalteMin)) &&
@@ -441,38 +443,72 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                 (w1Min === null || (item.w1 !== null && item.w1 >= w1Min)) &&
                 (w1Max === null || (item.w1 !== null && item.w1 <= w1Max))
             );
-
+    
             updateFilters(countryFilteredData, baselineData, brFilteredData, filtered);
             displayResults(filtered);
         }
-
+    
         function updateFilters(countryFilteredData, baselineData, brFilteredData, filteredData) {
             const countryChecked = new Set(Array.from(document.querySelectorAll('.country-checkbox:checked')).map(cb => cb.value));
             const routeChecked = new Set(Array.from(document.querySelectorAll('.route-checkbox:checked')).map(cb => cb.value));
             const brChecked = new Set(Array.from(document.querySelectorAll('.br-checkbox:checked')).map(cb => cb.value));
             const startChecked = new Set(Array.from(document.querySelectorAll('.start-checkbox:checked')).map(cb => cb.value));
             const endChecked = new Set(Array.from(document.querySelectorAll('.end-checkbox:checked')).map(cb => cb.value));
-
+    
             const allCountries = [...new Set(trainData.map(item => item.country).filter(v => v))].sort();
             const allRoutes = [...new Set(countryFilteredData.map(item => item.route).filter(v => v))].sort();
+            const allBRs = [...new Set(baselineData.map(item => item.br).filter(v => v))].sort();
             const allStarts = [...new Set(trainData.map(item => item.start).filter(v => v))].sort();
             const allEnds = [...new Set(trainData.map(item => item.ende).filter(v => v))].sort();
-
+    
             const activeCountries = [...new Set(filteredData.map(item => item.country).filter(v => v))].sort();
             const activeRoutes = [...new Set(brFilteredData.map(item => item.route).filter(v => v))].sort();
-            const availableBRs = [...new Set(brFilteredData.map(item => item.br).filter(v => v))].sort();
             const activeStarts = [...new Set(filteredData.map(item => item.start).filter(v => v))].sort();
             const activeEnds = [...new Set(filteredData.map(item => item.ende).filter(v => v))].sort();
-
+    
             const baselineNhalteValues = [...new Set(brFilteredData.map(item => item.nhalte).filter(v => v != null))].sort((a, b) => a - b);
             const baselineW1Values = [...new Set(brFilteredData.map(item => item.w1).filter(v => v != null))].sort((a, b) => a - b);
-
-            populateCheckboxList(countryList, allCountries, 'country-checkbox', countryChecked, true, activeCountries);
-            populateCheckboxList(routeList, allRoutes, 'route-checkbox', routeChecked, true, activeRoutes);
-            populateCheckboxList(brList, availableBRs, 'br-checkbox', brChecked);
-            populateCheckboxList(startList, allStarts, 'start-checkbox', startChecked, true, activeStarts);
-            populateCheckboxList(endList, allEnds, 'end-checkbox', endChecked, true, activeEnds);
-
+    
+            // Update countries list only if none are checked
+            if (countryChecked.size === 0) {
+                populateCheckboxList(countryList, allCountries, 'country-checkbox', countryChecked, true, activeCountries);
+                lastCountryState = { values: allCountries, checked: new Set(), active: activeCountries };
+            } else {
+                populateCheckboxList(countryList, lastCountryState.values, 'country-checkbox', countryChecked, true, lastCountryState.active);
+            }
+    
+            // Update routes list only if none are checked
+            if (routeChecked.size === 0) {
+                populateCheckboxList(routeList, allRoutes, 'route-checkbox', routeChecked, true, activeRoutes);
+                lastRouteState = { values: allRoutes, checked: new Set(), active: activeRoutes };
+            } else {
+                populateCheckboxList(routeList, lastRouteState.values, 'route-checkbox', routeChecked, true, lastRouteState.active);
+            }
+    
+            // Update BR list only if none are checked
+            if (brChecked.size === 0) {
+                populateCheckboxList(brList, allBRs, 'br-checkbox', brChecked);
+                lastBRState = { values: allBRs, checked: new Set() };
+            } else {
+                populateCheckboxList(brList, lastBRState.values, 'br-checkbox', brChecked);
+            }
+    
+            // Update start types list only if none are checked
+            if (startChecked.size === 0) {
+                populateCheckboxList(startList, allStarts, 'start-checkbox', startChecked, true, activeStarts);
+                lastStartState = { values: allStarts, checked: new Set(), active: activeStarts };
+            } else {
+                populateCheckboxList(startList, lastStartState.values, 'start-checkbox', startChecked, true, lastStartState.active);
+            }
+    
+            // Update end types list only if none are checked
+            if (endChecked.size === 0) {
+                populateCheckboxList(endList, allEnds, 'end-checkbox', endChecked, true, activeEnds);
+                lastEndState = { values: allEnds, checked: new Set(), active: activeEnds };
+            } else {
+                populateCheckboxList(endList, lastEndState.values, 'end-checkbox', endChecked, true, lastEndState.active);
+            }
+    
             if (baselineNhalteValues.length > 0) {
                 populateDropdown(nhalteMinFilter, baselineNhalteValues);
                 populateDropdown(nhalteMaxFilter, baselineNhalteValues);
@@ -481,19 +517,19 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                 populateDropdown(w1MinFilter, baselineW1Values);
                 populateDropdown(w1MaxFilter, baselineW1Values);
             }
-
+    
             document.querySelectorAll('.country-checkbox, .route-checkbox, .br-checkbox, .start-checkbox, .end-checkbox').forEach(cb => {
                 cb.addEventListener('change', filterData);
             });
         }
-
+    
         function displayResults(data) {
             const selectedCountries = Array.from(document.querySelectorAll('.country-checkbox:checked')).map(cb => cb.value);
             const selectedRoutes = Array.from(document.querySelectorAll('.route-checkbox:checked')).map(cb => cb.value);
             const selectedBRs = Array.from(document.querySelectorAll('.br-checkbox:checked')).map(cb => cb.value);
             const selectedStarts = Array.from(document.querySelectorAll('.start-checkbox:checked')).map(cb => cb.value);
             const selectedEnds = Array.from(document.querySelectorAll('.end-checkbox:checked')).map(cb => cb.value);
-
+    
             const hiddenCols = new Set();
             if (artFilter.value) hiddenCols.add('art');
             if (evFilter.checked) hiddenCols.add('ev');
@@ -503,12 +539,12 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             if (selectedBRs.length === 1) hiddenCols.add('br');
             if (selectedStarts.length === 1) hiddenCols.add('start');
             if (selectedEnds.length === 1) hiddenCols.add('ende');
-
+    
             document.querySelectorAll('#results-table th').forEach(th => {
                 const col = th.getAttribute('data-col');
                 th.style.display = hiddenCols.has(col) ? 'none' : '';
             });
-
+    
             resultsBody.innerHTML = '';
             resultsCount.textContent = `Showing ${data.length} results`;
             data.forEach((item, index) => {
@@ -541,19 +577,19 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                 resultsBody.appendChild(row);
             });
         }
-
+    
         function showStops(index) {
             const item = trainData[index];
             const stops = (item.halte || '').split(', ').filter(stop => stop.trim());
             stopsContent.innerHTML = stops.length > 0 ? stops.map(stop => `<p>${stop}</p>`).join('') : '<p>No stops available</p>';
             stopsModal.style.display = 'block';
         }
-
+    
         closeModal.onclick = () => stopsModal.style.display = 'none';
         window.onclick = (event) => {
             if (event.target == stopsModal) stopsModal.style.display = 'none';
         };
-
+    
         countrySelectAll.addEventListener('click', () => {
             document.querySelectorAll('.country-checkbox:not(:disabled)').forEach(cb => cb.checked = true);
             filterData();
@@ -594,14 +630,14 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             document.querySelectorAll('.end-checkbox').forEach(cb => cb.checked = false);
             filterData();
         });
-
+    
         [nhalteMinFilter, nhalteMaxFilter, w1MinFilter, w1MaxFilter].forEach(element => {
             element.addEventListener('change', (e) => {
                 rangeManipulated[e.target.id.replace('filter-', '')] = true;
                 filterData();
             });
         });
-
+    
         [artFilter, gattungFilter, exactGattung, zugnrFilter, exactZugnr, beginMinFilter, beginMaxFilter, 
          fahrzeitMinFilter, fahrzeitMaxFilter, brFilter, exactBR, skmMinFilter, skmMaxFilter, dvMinFilter, dvMaxFilter,
          laengeMinFilter, laengeMaxFilter, masseMinFilter, masseMaxFilter,
@@ -609,7 +645,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             element.addEventListener('change', filterData);
             element.addEventListener('keyup', filterData);
         });
-
+    
         filterData();
     </script>
 </body>
