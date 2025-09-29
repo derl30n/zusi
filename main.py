@@ -401,36 +401,48 @@ class Service:
 
         return res
 
-    def getAsDict(self) -> dict:
-        duration = (self._end.timeArr or self._end.timeDep) - self._start.timeDep
-        dv = 0 if duration.seconds == 0 else int((self._end.runningDistance / duration.seconds) * 3.6)
+    def getAsDict(self, index: int, element: Entry, isFullService: bool = False) -> dict:
+        duration = (self._end.timeArr or self._end.timeDep) - (element.timeArr or element.timeDep)
+        runningDistance = self._end.runningDistance - element.runningDistance
+        dv = 0 if duration.seconds == 0 else int((runningDistance / duration.seconds) * 3.6)
 
         return {
             "art": "P" if self._isPassengerTrain else "C",
             "gattung": self._gattung,
             "zugnr": self._zugnr,
-            "begin": datetime.strftime(self._start.timeArr, "%H:%M"),
+            "zeit": datetime.strftime(element.timeArr, "%H:%M"),
             "fahrzeit": str(duration),
             "br": self._br,
             "laenge": self._laenge,
             "masse": self._masse,
-            "nhalte": len(self._plannedStopps),
-            "ev": self._hasEvent,
-            "w1": self._turnarounds,
-            "start": self._start.flag.name,
+            "nhalte": len(self._plannedStopps[index:]),
+            "ev": self._hasEvent,  # event might have already happened earlier in the service
+            "w1": self._turnarounds,  # event might have already happened earlier in the service
+            "start": element.flag.name,
             "ende": self._end.flag.name,
-            "start_halt": self._start.isHolding,
             "end_halt": self._end.isPlannedStationary(),
-            "s_km": int(self._end.runningDistance / 1000),
+            "s_km": int(runningDistance / 1000),
             "dv": dv,
             "country": self._country,
             "route": self._route,
             "fahrplan": self._fahrplan,
-            "aufgleispunkt": self._start.name,
+            "aufgleispunkt": element.name,
             "zuglauf": self._zuglauf,
-            "halte": ", ".join(stopp.name for stopp in self._plannedStopps),
-            "end": self._end.name
+            "halte": ", ".join(stopp.name for stopp in self._plannedStopps[index:]),
+            "end": self._end.name,
+            "isFullService": isFullService
         }
+
+    def getAsDictNew(self) -> list[dict]:
+        result = [self.getAsDict(0, self._start, True)]
+
+        for index, element in enumerate(self._plannedStopps):
+            if element.runningDistance == self._end.runningDistance:
+                break
+
+            result.append(self.getAsDict(index, element))
+
+        return result
 
 
 @dataclass(frozen=True)
@@ -508,7 +520,7 @@ def getDataFromTimetables(timetables: list, config: Config) -> list[dict]:
                 errors.append(service)
                 continue
 
-            result.append(extractedService.getAsDict())
+            result.extend(extractedService.getAsDictNew())
 
     print(f"{len(errors)} ungültige Zugdienste ausgeschlossen.")
 
