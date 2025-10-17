@@ -402,7 +402,7 @@ class Service:
         return res
 
     def getAsDict(self, index: int, element: Entry, isFullService: bool = False) -> dict:
-        duration = (self._end.timeDep or self._end.timeArr) - (element.timeArr or element.timeDep)
+        duration = (self._end.timeArr or self._end.timeDep) - (element.timeArr or element.timeDep)
         runningDistance = self._end.runningDistance - element.runningDistance
         dv = 0 if duration.seconds == 0 else int((runningDistance / duration.seconds) * 3.6)
 
