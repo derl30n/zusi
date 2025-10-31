@@ -312,7 +312,7 @@ class Service:
             return
 
         # 2
-        if timetableEnd is not None and self._end.runningDistance - timetableEnd.runningDistance < 900:
+        if timetableEnd is not None and self._end.runningDistance - timetableEnd.runningDistance < 950:
             self._end = timetableEnd
             return
 
@@ -401,8 +401,13 @@ class Service:
 
         return res
 
-    def getAsDict(self, index: int, element: Entry, isFullService: bool = False) -> dict:
-        duration = (self._end.timeArr or self._end.timeDep) - (element.timeDep or element.timeArr)
+    def getAsDict(self, index: int, element: Entry) -> dict:
+        isFullService = index == 0
+
+        timeStart = element.timeDep or element.timeArr if isFullService else element.timeArr or element.timeDep
+        timeEnd = self._end.timeArr or self._end.timeDep
+
+        duration = timeEnd - timeStart
         runningDistance = self._end.runningDistance - element.runningDistance
         dv = 0 if duration.seconds == 0 else int((runningDistance / duration.seconds) * 3.6)
 
@@ -434,7 +439,7 @@ class Service:
         }
 
     def getAsDictNew(self) -> list[dict]:
-        result = [self.getAsDict(0, self._start, True)]
+        result = [self.getAsDict(0, self._start)]
 
         for index, element in enumerate(self._plannedStopps):
             if element.runningDistance == self._end.runningDistance:
