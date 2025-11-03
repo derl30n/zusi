@@ -441,7 +441,7 @@ class Service:
     def getAsDictNew(self) -> list[dict]:
         result = [self.getAsDict(0, self._start)]
 
-        for index, element in enumerate(self._plannedStopps):
+        for index, element in enumerate(self._plannedStopps, start=1):
             if element.runningDistance == self._end.runningDistance:
                 break
 
