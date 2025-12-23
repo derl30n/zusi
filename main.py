@@ -56,6 +56,7 @@ class Entry:
     isEbulaInfo: bool
     hasSignalInfo: bool
     isHolding: bool
+    fplEntry: int
 
     def __init__(
             self,
@@ -65,10 +66,11 @@ class Entry:
             isTurnAround: bool = False,
             runningDistance: int = 0,
             isEbulaInfo: bool = False,
-            hasSignalInfo: bool = False
+            hasSignalInfo: bool = False,
+            fplEntry: int = 0
     ):
         self.name = name
-        self.timeArr = timeArr
+        self.timeArr = timeArr if fplEntry == 0 else None
         self.timeDep = timeDep
         self.isTurnAround = isTurnAround
         self.runningDistance = runningDistance
@@ -141,7 +143,10 @@ class Entry:
         try:
             return datetime.strptime(timeString, '%Y-%m-%d %H:%M:%S')
         except ValueError:
-            return datetime.strptime(timeString, '%Y-%m-%d')
+            try:
+                return datetime.strptime(timeString, '%Y-%m-%d')
+            except ValueError:
+                return datetime.strptime(timeString, '%Y-%m-%d %H:%M')
 
 
 class EntryPlaceholder(Entry):
@@ -157,6 +162,7 @@ class EntryTimetable(Entry):
         dep = rawEntry.findall('FplAbf')
         isEbulaInfo = len(rawEntry.findall('FplIcon')) > 0
         hasSignalInfo = len(rawEntry.findall('FplSignaltyp')) > 0
+        fplEntry = int(arr[0].get('FplEintrag') or 0) if len(arr) > 0 else 0
 
         nameStr = name[0].get('FplNameText') if len(name) > 0 else ""
         arrStr = self.getTime(arr[0].get('Ank')) if len(arr) > 0 else None
@@ -171,7 +177,8 @@ class EntryTimetable(Entry):
             isTurnAround=isTurnAround,
             runningDistance=runningDistance,
             isEbulaInfo=isEbulaInfo,
-            hasSignalInfo=hasSignalInfo
+            hasSignalInfo=hasSignalInfo,
+            fplEntry=fplEntry
         )
 
 
@@ -370,9 +377,15 @@ class Service:
         last_name = None
 
         for entry in entryTimetableListDepArrTimes:
-            # we don't need to check for names since all PBF and GBF have names
-            if entry.flag not in [Flags.PBF, Flags.GBF]:
+            if entry.flag == Flags.OFFENE_STRECKE:
                 continue
+
+            # TODO: create new FLAG for timetable entries that have a signal entry like <FplSignaltyp FplSignaltypNr="9"/>.
+            # TODO: then check all services, whether this flag is reliable, e.g. entries with arr and dep times that also have this entry
+            # TODO: [Flags.PBF, Flags.GBF] are not reliable as they are for e.g. not 100% reliable for detecting stations.
+            # we don't need to check for names since all PBF and GBF have names
+            # if entry.flag not in [Flags.PBF, Flags.GBF]:
+            #     continue
 
             if last_name == entry.name:
                 continue
