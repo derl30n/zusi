@@ -438,6 +438,7 @@ class Service:
             "isFullService": isFullService
         }
 
+    # results in an entry per planned stop in the database for intermediate starting points
     def getAsDictNew(self) -> list[dict]:
         result = [self.getAsDict(0, self._start)]
 
@@ -497,37 +498,16 @@ def isServiceValid(service: str, flagged_words: list[str]) -> bool:
     return not any([x.lower() in service.lower() for x in flagged_words])
 
 
-def getDataFromTimetables(timetables: list, config: Config) -> list[dict]:
-    result: list[dict] = []
-    errors: list[str] = []
+def getServicesFromTimetables(timetables: list, config: Config) -> list[str]:
+    result: list[str] = []
 
-    for timetable in tqdm(timetables, desc="Durchsuche Fahrpläne nach Zugdiensten"):
+    for timetable in tqdm(timetables, desc="Fahrpläne durchsuchen"):
         for service in [f.path for f in os.scandir(timetable) if
                         config.datatype.service == f.path[-len(config.datatype.service):]]:
             if not isServiceValid(service, config.exclusionKeywords):
                 continue
 
-            root = Et.parse(service).getroot()
-
-            try:
-                trn_root = Et.parse(f'{service[:-13]}trn').getroot()
-            except FileNotFoundError:
-                continue
-
-            trn_zug = trn_root.findall('Zug')[0]
-
-            if not isServiceValid(trn_zug.get('FahrplanGruppe'), config.exclusionKeywords):
-                continue
-
-            extractedService = Service(service, root, trn_zug)
-
-            if not extractedService.isValid:
-                errors.append(service)
-                continue
-
-            result.extend(extractedService.getAsDictNew())
-
-    print(f"{len(errors)} ungültige Zugdienste ausgeschlossen.")
+            result.append(service)
 
     return result
 
@@ -548,10 +528,34 @@ def extrapolateDataFromZusi() -> list[dict]:
     )
 
     timetables = getTimetablesFromZusiFiles(config)
-    print(f'{len(timetables)} Fahrpläne gefunden.')
+    services = getServicesFromTimetables(timetables, config)
 
-    result = getDataFromTimetables(timetables, config)
-    print(f"{len(result)} Zugdienste gefunden.")
+    result: list[dict] = []
+    errors: list[str] = []
+
+    # for timetable in tqdm(timetables, desc="Durchsuche Fahrpläne nach Zugdiensten"):
+    for service in tqdm(services, desc="Zugdienste analysieren"):
+        root = Et.parse(service).getroot()
+
+        try:
+            trn_root = Et.parse(f'{service[:-13]}trn').getroot()
+        except FileNotFoundError:
+            continue
+
+        trn_zug = trn_root.findall('Zug')[0]
+
+        if not isServiceValid(trn_zug.get('FahrplanGruppe'), config.exclusionKeywords):
+            continue
+
+        extractedService = Service(service, root, trn_zug)
+
+        if not extractedService.isValid:
+            errors.append(service)
+            continue
+
+        result.extend(extractedService.getAsDictNew())
+
+    print(f"{len(errors)} ungültige Zugdienste ausgeschlossen. {len(result)} Zugdiensteinträge erstellt.")
 
     return result
 
